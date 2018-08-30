@@ -33,12 +33,13 @@ use SQL::Translator::Parser::SQLCommon qw(
   $SQSTRING
   $SBSTRING
   $BQSTRING
+  $NUMBER
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $BQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $BQSTRING, $NUMBER;
 
 {
     my ( %tables, $table_order, @table_comments );
@@ -367,8 +368,7 @@ NAME    : BQSTRING
     { $item[1] }
     | SBSTRING
 
-VALUE   : /[-+]?\.?\d+(?:[eE]\d+)?/
-    { $item[1] }
+VALUE   : NUMBER
     | SQSTRING
     | /NULL/
     { 'NULL' }

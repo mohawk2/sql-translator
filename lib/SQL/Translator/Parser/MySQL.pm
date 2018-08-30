@@ -145,6 +145,7 @@ use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING_BS
   $SQSTRING_BS
   $BQSTRING_BS
+  $NUMBER
 );
 
 use base qw(Exporter);
@@ -154,7 +155,7 @@ our %type_mapping = ();
 
 use constant DEFAULT_PARSER_VERSION => 40000;
 
-our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS;
+our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER;
 
 {
     my ( $database_name, %tables, $table_order, @table_comments, %views,
@@ -829,8 +830,7 @@ QUOTED_NAME : BQSTRING_BS
 NAME: QUOTED_NAME
     | /\w+/
 
-VALUE : /[-+]?\d*\.?\d+(?:[eE]\d+)?/
-    { $item[1] }
+VALUE : NUMBER
     | SQSTRING_BS
     | DQSTRING_BS
     | /NULL/i

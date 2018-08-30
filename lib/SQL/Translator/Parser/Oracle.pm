@@ -88,12 +88,13 @@ use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
+  $NUMBER
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER;
 
 { my ( %tables, %indices, %constraints, $table_order, @table_comments, %views, $view_order, %procedures, $proc_order, %triggers, $trigger_order ) }
 
@@ -604,7 +605,7 @@ NAME : /\w+/ { $item[1] }
 
 TABLE : /table/i
 
-VALUE : /[-+]?\d*\.?\d+(?:[eE]\d+)?/
+VALUE : NUMBER
     | SQSTRING
     | /null/i
     { 'NULL' }

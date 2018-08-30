@@ -124,6 +124,17 @@ BQSTRING : "`" <skip: ''> /((?:[^`]|``)*)/ "`"
     { ($return = $item[3]) =~ s/``/`/g }
 EOF
 
+=item $NUMBER
+
+A scientific-notation number.
+
+=cut
+
+push @EXPORT_OK, qw($NUMBER);
+our $NUMBER = <<'EOF';
+NUMBER : /[-+]?\d*\.?\d+(?:[eE]\d+)?/
+EOF
+
 =back
 
 =cut

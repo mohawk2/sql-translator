@@ -30,12 +30,13 @@ use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
   $SBSTRING
+  $NUMBER
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $SBSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $SBSTRING, $NUMBER;
 
 {
     my ( %tables, @table_comments, $table_order, %procedures, $proc_order, %views, $view_order );
@@ -328,12 +329,14 @@ nullable : /not/i /null/i
     | /null/i
     { $return = 1 }
 
-default_val : /default/i /null/i
+default_val : /default/i VALUE
+    { $return = $item[2] }
+
+VALUE : /null/i
     { $return = 'null' }
-   | /default/i SQSTRING
-    { $return = $item[2] }
-   | /default/i WORD
-    { $return = $item[2] }
+   | SQSTRING
+   | WORD
+   | NUMBER
 
 auto_inc : /identity/i { 1 }
 

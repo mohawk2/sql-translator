@@ -30,12 +30,13 @@ use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $SQSTRING
   $SBSTRING
+  $NUMBER
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $NUMBER;
 
 {
     my ( %tables, @table_comments, $table_order );
@@ -219,8 +220,7 @@ nullable : /not/i /null/i
 default_val : /default/i VALUE
     { $return=$item[2] }
 
-VALUE : /[-+]?\.?\d+(?:[eE]\d+)?/
-    { $item[1] }
+VALUE : NUMBER
     | SQSTRING
     | /NULL/
     { 'NULL' }

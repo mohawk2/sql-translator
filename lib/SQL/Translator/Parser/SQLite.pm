@@ -143,12 +143,13 @@ use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
+  $NUMBER
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER;
 
 {
     my ( %tables, $table_order, @table_comments, @views, @triggers );
@@ -627,8 +628,7 @@ NAME : /\w+/
 DQSTRING : '"' <skip: ''> /((?:[^"]|"")+)/ '"'
     { ($return = $item[3]) =~ s/""/"/g }
 
-VALUE : /[-+]?\d*\.?\d+(?:[eE]\d+)?/
-    { $item[1] }
+VALUE : NUMBER
     | SQSTRING
     | /NULL/i
     { 'NULL' }

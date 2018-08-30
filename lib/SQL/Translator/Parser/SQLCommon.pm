@@ -62,6 +62,19 @@ DQSTRING : '"' <skip: ''> /((?:[^"]|"")+)/ '"'
     { ($return = $item[3]) =~ s/""/"/g; }
 EOF
 
+=item $SQSTRING_BS
+
+Single-quoted string which can backslash-quote C<\> or C<'> as well as
+double the C<'>.
+
+=cut
+
+push @EXPORT_OK, qw($SQSTRING_BS);
+our $SQSTRING_BS = <<'EOF';
+SQSTRING_BS: "'" <skip: ''> /(?:[^\\']|''|\\.)*/ "'"
+    { ($return = $item[3]) =~ s/(\\[\\']|'')/substr($1,1)/ge }
+EOF
+
 =back
 
 =cut

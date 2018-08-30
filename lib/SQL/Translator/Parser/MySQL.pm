@@ -143,6 +143,7 @@ use DBI qw(:sql_types);
 use SQL::Translator::Utils qw/parse_mysql_version ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING_BS
+  $SQSTRING_BS
 );
 
 use base qw(Exporter);
@@ -152,7 +153,7 @@ our %type_mapping = ();
 
 use constant DEFAULT_PARSER_VERSION => 40000;
 
-our $GRAMMAR = << 'END_OF_GRAMMAR' . $DQSTRING_BS;
+our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS;
 
 {
     my ( $database_name, %tables, $table_order, @table_comments, %views,
@@ -212,7 +213,7 @@ string :
   # MySQL strings, unlike common SQL strings, can be double-quoted or
   # single-quoted.
 
-  SQSTRING | DQSTRING_BS
+  SQSTRING_BS | DQSTRING_BS
 
 nonstring : /[^;\'"]+/
 
@@ -822,10 +823,8 @@ COMMA : ','
 
 BACKTICK : '`'
 
-SINGLE_QUOTE: "'"
-
 QUOTED_NAME : BQSTRING
-    | SQSTRING
+    | SQSTRING_BS
     | DQSTRING_BS
 
 # MySQL strings, unlike common SQL strings, can have the delmiters
@@ -833,15 +832,12 @@ QUOTED_NAME : BQSTRING
 BQSTRING: BACKTICK <skip: ''> /(?:[^\\`]|``|\\.)*/ BACKTICK
     { ($return = $item[3]) =~ s/(\\[\\`]|``)/substr($1,1)/ge }
 
-SQSTRING: SINGLE_QUOTE <skip: ''> /(?:[^\\']|''|\\.)*/ SINGLE_QUOTE
-    { ($return = $item[3]) =~ s/(\\[\\']|'')/substr($1,1)/ge }
-
 NAME: QUOTED_NAME
     | /\w+/
 
 VALUE : /[-+]?\d*\.?\d+(?:[eE]\d+)?/
     { $item[1] }
-    | SQSTRING
+    | SQSTRING_BS
     | DQSTRING_BS
     | /NULL/i
     { 'NULL' }

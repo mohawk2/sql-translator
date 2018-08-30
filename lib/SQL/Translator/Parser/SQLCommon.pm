@@ -112,6 +112,18 @@ BQSTRING_BS: '`' <skip: ''> /(?:[^\\`]|``|\\.)*/ '`'
     { ($return = $item[3]) =~ s/(\\[\\`]|``)/substr($1,1)/ge }
 EOF
 
+=item $BQSTRING
+
+Back-quoted string which doubles any C<`>.
+
+=cut
+
+push @EXPORT_OK, qw($BQSTRING);
+our $BQSTRING = <<'EOF';
+BQSTRING : "`" <skip: ''> /((?:[^`]|``)*)/ "`"
+    { ($return = $item[3]) =~ s/``/`/g }
+EOF
+
 =back
 
 =cut

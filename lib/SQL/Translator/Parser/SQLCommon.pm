@@ -99,6 +99,19 @@ SBSTRING : '[' <skip: ''> /(?:[^]]|]])+/ ']'
     { ($return = $item[3]) =~ s/]]/]/g; }
 EOF
 
+=item $BQSTRING_BS
+
+Back-quoted string which can backslash-quote C<\> or C<`> as well as
+double the C<`>.
+
+=cut
+
+push @EXPORT_OK, qw($BQSTRING_BS);
+our $BQSTRING_BS = <<'EOF';
+BQSTRING_BS: '`' <skip: ''> /(?:[^\\`]|``|\\.)*/ '`'
+    { ($return = $item[3]) =~ s/(\\[\\`]|``)/substr($1,1)/ge }
+EOF
+
 =back
 
 =cut

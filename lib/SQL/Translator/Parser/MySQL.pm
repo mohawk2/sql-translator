@@ -144,6 +144,7 @@ use SQL::Translator::Utils qw/parse_mysql_version ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING_BS
   $SQSTRING_BS
+  $BQSTRING_BS
 );
 
 use base qw(Exporter);
@@ -153,7 +154,7 @@ our %type_mapping = ();
 
 use constant DEFAULT_PARSER_VERSION => 40000;
 
-our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS;
+our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS;
 
 {
     my ( $database_name, %tables, $table_order, @table_comments, %views,
@@ -821,16 +822,9 @@ DIGITS : /\d+/
 
 COMMA : ','
 
-BACKTICK : '`'
-
-QUOTED_NAME : BQSTRING
+QUOTED_NAME : BQSTRING_BS
     | SQSTRING_BS
     | DQSTRING_BS
-
-# MySQL strings, unlike common SQL strings, can have the delmiters
-# escaped either by doubling or by backslashing.
-BQSTRING: BACKTICK <skip: ''> /(?:[^\\`]|``|\\.)*/ BACKTICK
-    { ($return = $item[3]) =~ s/(\\[\\`]|``)/substr($1,1)/ge }
 
 NAME: QUOTED_NAME
     | /\w+/

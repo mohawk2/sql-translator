@@ -144,12 +144,13 @@ use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
   $NUMBER
+  $NULL
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
 
 {
     my ( %tables, $table_order, @table_comments, @views, @triggers );
@@ -630,8 +631,7 @@ DQSTRING : '"' <skip: ''> /((?:[^"]|"")+)/ '"'
 
 VALUE : NUMBER
     | SQSTRING
-    | /NULL/i
-    { 'NULL' }
+    | NULL
     | /CURRENT_TIMESTAMP/i
     { 'CURRENT_TIMESTAMP' }
 

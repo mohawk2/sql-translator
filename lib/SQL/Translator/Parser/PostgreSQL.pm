@@ -100,12 +100,13 @@ use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
   $NUMBER
+  $NULL
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
 
 { my ( %tables, @views, @triggers, $table_order, $field_order, @table_comments) }
 
@@ -365,8 +366,7 @@ comment_on_other : /comment/i /on/i /\w+/ /\w+/ /is/i comment_phrase ';'
 column_name : NAME '.' NAME
     { $return = { table => $item[1], field => $item[3] } }
 
-comment_phrase : /null/i
-    { $return = 'NULL' }
+comment_phrase : NULL
     | SQSTRING
 
 field : field_comment(s?) field_name data_type field_meta(s?) field_comment(s?)
@@ -1017,8 +1017,7 @@ DOLLARSTRING : /\$[^\$]*\$/ <skip: ''> /.*?(?=\Q$item[1]\E)/s "$item[1]"
 VALUE : NUMBER
     | SQSTRING
     | DOLLARSTRING
-    | /null/i
-    { 'NULL' }
+    | NULL
 
 END_OF_GRAMMAR
 

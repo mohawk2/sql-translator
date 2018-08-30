@@ -89,12 +89,13 @@ use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
   $NUMBER
+  $NULL
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
 
 { my ( %tables, %indices, %constraints, $table_order, @table_comments, %views, $view_order, %procedures, $proc_order, %triggers, $trigger_order ) }
 
@@ -607,8 +608,7 @@ TABLE : /table/i
 
 VALUE : NUMBER
     | SQSTRING
-    | /null/i
-    { 'NULL' }
+    | NULL
 
 END_OF_GRAMMAR
 

@@ -146,6 +146,7 @@ use SQL::Translator::Parser::SQLCommon qw(
   $SQSTRING_BS
   $BQSTRING_BS
   $NUMBER
+  $NULL
 );
 
 use base qw(Exporter);
@@ -155,7 +156,7 @@ our %type_mapping = ();
 
 use constant DEFAULT_PARSER_VERSION => 40000;
 
-our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER;
+our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER, $NULL;
 
 {
     my ( $database_name, %tables, $table_order, @table_comments, %views,
@@ -833,8 +834,7 @@ NAME: QUOTED_NAME
 VALUE : NUMBER
     | SQSTRING_BS
     | DQSTRING_BS
-    | /NULL/i
-    { 'NULL' }
+    | NULL
 
 # always a scalar-ref, so that it is treated as a function and not quoted by consumers
 CURRENT_TIMESTAMP :

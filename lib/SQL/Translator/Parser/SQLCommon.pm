@@ -135,6 +135,17 @@ our $NUMBER = <<'EOF';
 NUMBER : /[-+]?\d*\.?\d+(?:[eE]\d+)?/
 EOF
 
+=item $NULL
+
+The word C<NULL>, case-insensitive.
+
+=cut
+
+push @EXPORT_OK, qw($NULL);
+our $NULL = <<'EOF';
+NULL : /null/i { 'NULL' }
+EOF
+
 =back
 
 =cut

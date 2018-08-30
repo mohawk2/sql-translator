@@ -50,6 +50,18 @@ DQSTRING_BS: '"' <skip: ''> /(?:[^\\"]|""|\\.)*/ '"'
     { ($return = $item[3]) =~ s/(\\[\\"]|"")/substr($1,1)/ge }
 EOF
 
+=item $DQSTRING
+
+Double-quoted string which doubles any C<">.
+
+=cut
+
+push @EXPORT_OK, qw($DQSTRING);
+our $DQSTRING = <<'EOF';
+DQSTRING : '"' <skip: ''> /((?:[^"]|"")+)/ '"'
+    { ($return = $item[3]) =~ s/""/"/g; }
+EOF
+
 =back
 
 =cut

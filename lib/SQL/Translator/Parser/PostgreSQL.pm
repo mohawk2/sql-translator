@@ -96,11 +96,14 @@ $DEBUG   = 0 unless defined $DEBUG;
 
 use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
+use SQL::Translator::Parser::SQLCommon qw(
+  $DQSTRING
+);
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR';
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING;
 
 { my ( %tables, @views, @triggers, $table_order, $field_order, @table_comments) }
 

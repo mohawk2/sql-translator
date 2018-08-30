@@ -87,6 +87,18 @@ SQSTRING : "'" <skip: ''> /((?:[^']|'')*)/ "'"
     { ($return = $item[3]) =~ s/''/'/g }
 EOF
 
+=item $SBSTRING
+
+Square-bracket-quoted string which doubles any C<]>.
+
+=cut
+
+push @EXPORT_OK, qw($SBSTRING);
+our $SBSTRING = <<'EOF';
+SBSTRING : '[' <skip: ''> /(?:[^]]|]])+/ ']'
+    { ($return = $item[3]) =~ s/]]/]/g; }
+EOF
+
 =back
 
 =cut

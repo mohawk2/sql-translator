@@ -29,12 +29,13 @@ use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $SQSTRING
+  $SBSTRING
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING;
 
 {
     my ( %tables, @table_comments, $table_order );
@@ -184,11 +185,11 @@ field : field_name data_type nullable(?)
 constraint : primary_key_constraint
     | unique_constraint
 
-field_name : WORD
+field_name : WORD | SBSTRING
 
-index_name : WORD
+index_name : WORD | SBSTRING
 
-table_name : WORD
+table_name : WORD | SBSTRING
 
 data_type : WORD field_size(?)
     {

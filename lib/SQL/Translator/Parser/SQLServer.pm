@@ -29,12 +29,13 @@ use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
+  $SBSTRING
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $SBSTRING;
 
 {
     my ( %tables, @table_comments, $table_order, %procedures, $proc_order, %views, $view_order );
@@ -436,16 +437,13 @@ USERNAME : WORD
 
 NAME : WORD
     | DQSTRING
-    | BQSTRING
+    | SBSTRING
 
 WORD : /[\w#]+/
 
 DIGITS : /\d+/
 
 COMMA : ','
-
-BQSTRING : '[' <skip: ''> /(?:[^]]|]])+/ ']'
-    { ($return = $item[3]) =~ s/]]/]/g; }
 
 END_OF_GRAMMAR
 

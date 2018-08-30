@@ -31,12 +31,13 @@ use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $SQSTRING
+  $SBSTRING
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING;
 
 {
     my ( %tables, $table_order, @table_comments );
@@ -364,6 +365,7 @@ NAME    : "`" /\w+/ "`"
     { $item[2] }
     | /\w+/
     { $item[1] }
+    | SBSTRING
 
 VALUE   : /[-+]?\.?\d+(?:[eE]\d+)?/
     { $item[1] }

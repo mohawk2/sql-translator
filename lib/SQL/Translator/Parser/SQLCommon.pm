@@ -75,6 +75,18 @@ SQSTRING_BS: "'" <skip: ''> /(?:[^\\']|''|\\.)*/ "'"
     { ($return = $item[3]) =~ s/(\\[\\']|'')/substr($1,1)/ge }
 EOF
 
+=item $SQSTRING
+
+Single-quoted string which doubles any C<'>.
+
+=cut
+
+push @EXPORT_OK, qw($SQSTRING);
+our $SQSTRING = <<'EOF';
+SQSTRING : "'" <skip: ''> /((?:[^']|'')*)/ "'"
+    { ($return = $item[3]) =~ s/''/'/g }
+EOF
+
 =back
 
 =cut

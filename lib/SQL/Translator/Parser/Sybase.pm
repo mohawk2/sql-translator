@@ -27,11 +27,14 @@ $DEBUG   = 0 unless defined $DEBUG;
 
 use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
+use SQL::Translator::Parser::SQLCommon qw(
+  $SQSTRING
+);
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR';
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING;
 
 {
     my ( %tables, @table_comments, $table_order );
@@ -212,8 +215,14 @@ nullable : /not/i /null/i
     | /null/i
     { $return = 1 }
 
-default_val : /default/i /(?:')?[\w\d.-]*(?:')?/
-    { $item[2]=~s/'//g; $return=$item[2] }
+default_val : /default/i VALUE
+    { $return=$item[2] }
+
+VALUE : /[-+]?\.?\d+(?:[eE]\d+)?/
+    { $item[1] }
+    | SQSTRING
+    | /NULL/
+    { 'NULL' }
 
 auto_inc : /auto_increment/i { 1 }
 

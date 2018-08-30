@@ -29,11 +29,14 @@ $DEBUG = 0 unless defined $DEBUG;
 
 use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
+use SQL::Translator::Parser::SQLCommon qw(
+  $SQSTRING
+);
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR';
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING;
 
 {
     my ( %tables, $table_order, @table_comments );
@@ -259,9 +262,8 @@ not_null     : /not/i /null/i { $return = 0 }
 
 unsigned     : /unsigned/i { $return = 0 }
 
-default_val : /default/i /'(?:.*?\')*.*?'|(?:')?[\w\d:.-]*(?:')?/
+default_val : /default/i VALUE
     {
-        $item[2] =~ s/^\s*'|'\s*$//g;
         $return  =  $item[2];
     }
 
@@ -365,13 +367,7 @@ NAME    : "`" /\w+/ "`"
 
 VALUE   : /[-+]?\.?\d+(?:[eE]\d+)?/
     { $item[1] }
-    | /'.*?'/
-    {
-        # remove leading/trailing quotes
-        my $val = $item[1];
-        $val    =~ s/^['"]|['"]$//g;
-        $return = $val;
-    }
+    | SQSTRING
     | /NULL/
     { 'NULL' }
 

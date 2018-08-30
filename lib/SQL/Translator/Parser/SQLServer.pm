@@ -28,12 +28,13 @@ use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
+  $SQSTRING
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING;
 
 {
     my ( %tables, @table_comments, $table_order, %procedures, $proc_order, %views, $view_order );
@@ -442,9 +443,6 @@ WORD : /[\w#]+/
 DIGITS : /\d+/
 
 COMMA : ','
-
-SQSTRING : "'" <skip: ''> /(?:[^']|'')*/ "'"
-    { ($return = $item[3]) =~ s/''/'/g }
 
 BQSTRING : '[' <skip: ''> /(?:[^]]|]])+/ ']'
     { ($return = $item[3]) =~ s/]]/]/g; }

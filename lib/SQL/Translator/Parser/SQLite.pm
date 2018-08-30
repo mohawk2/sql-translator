@@ -142,12 +142,13 @@ use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
+  $SQSTRING
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING;
 
 {
     my ( %tables, $table_order, @table_comments, @views, @triggers );
@@ -532,12 +533,9 @@ for_each : /FOR EACH ROW/i
 
 when : WHEN expr { $item[2] }
 
-string :
-   /'(\.|''|[^\\'])*'/
-
 nonstring : /[^;\'"]+/
 
-statement_body : string | nonstring
+statement_body : SQSTRING | nonstring
 
 trigger_step : /(select|delete|insert|update)/i statement_body(s?) SEMICOLON
     {
@@ -628,9 +626,6 @@ NAME : /\w+/
 
 DQSTRING : '"' <skip: ''> /((?:[^"]|"")+)/ '"'
     { ($return = $item[3]) =~ s/""/"/g }
-
-SQSTRING : "'" <skip: ''> /((?:[^']|'')*)/ "'"
-    { ($return = $item[3]) =~ s/''/'/g }
 
 VALUE : /[-+]?\d*\.?\d+(?:[eE]\d+)?/
     { $item[1] }

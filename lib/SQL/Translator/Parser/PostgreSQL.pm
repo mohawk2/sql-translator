@@ -98,12 +98,13 @@ use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
+  $SQSTRING
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING;
 
 { my ( %tables, @views, @triggers, $table_order, $field_order, @table_comments) }
 
@@ -180,12 +181,9 @@ grant : /grant/i WORD(s /,/) /on/i SCHEMA(?) schema_name /to/i NAME(s /,/) ';'
 
 drop : /drop/i /[^;]*/ ';'
 
-string :
-   /'(\.|''|[^\\'])*'/
-
 nonstring : /[^;\'"]+/
 
-statement_body : string | nonstring
+statement_body : SQSTRING | nonstring
 
 insert : /insert/i statement_body(s?) ';'
 
@@ -1011,9 +1009,6 @@ NAME : DQSTRING
 
 DQSTRING : '"' <skip: ''> /((?:[^"]|"")+)/ '"'
     { ($return = $item[3]) =~ s/""/"/g; }
-
-SQSTRING : "'" <skip: ''> /((?:[^']|'')*)/ "'"
-    { ($return = $item[3]) =~ s/''/'/g }
 
 DOLLARSTRING : /\$[^\$]*\$/ <skip: ''> /.*?(?=\Q$item[1]\E)/s "$item[1]"
     { $return = $item[3]; }

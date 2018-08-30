@@ -87,12 +87,13 @@ use Data::Dumper;
 use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
+  $SQSTRING
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING;
 
 { my ( %tables, %indices, %constraints, $table_order, @table_comments, %views, $view_order, %procedures, $proc_order, %triggers, $trigger_order ) }
 
@@ -325,12 +326,7 @@ comment_on_column : /comment/i /on/i /column/i column_name /is/i comment_phrase 
 column_name : NAME '.' NAME
     { $return = { table => $item[1], field => $item[3] } }
 
-comment_phrase : /'.*?'/
-    {
-        my $val = $item[1];
-        $val =~ s/^'|'$//g;
-        $return = $val;
-    }
+comment_phrase : SQSTRING
 
 field : comment(s?) field_name data_type field_meta(s?) comment(s?)
     {
@@ -607,9 +603,6 @@ NAME : /\w+/ { $item[1] }
     | DQSTRING
 
 TABLE : /table/i
-
-SQSTRING : "'" <skip: ''> /((?:[^']|'')*)/ "'"
-    { ($return = $item[3]) =~ s/''/'/g }
 
 VALUE : /[-+]?\d*\.?\d+(?:[eE]\d+)?/
     | SQSTRING

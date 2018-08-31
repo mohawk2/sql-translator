@@ -158,6 +158,30 @@ our $BLANK_LINE = <<'EOF';
 BLANK_LINE : <skip: ''> /\A\n/
 EOF
 
+=item $COMMENT_DD
+
+Single-line comment preceded by C<-->.
+
+=cut
+
+push @EXPORT_OK, qw($COMMENT_DD);
+our $COMMENT_DD = <<'EOF';
+COMMENT_DD : <skip: ''> /^[ \t]*--[ \t]*(.*?)[ \t]*\n/
+    { $return = $1; }
+EOF
+
+=item $COMMENT_HASH
+
+Single-line comment preceded by C<#>.
+
+=cut
+
+push @EXPORT_OK, qw($COMMENT_HASH);
+our $COMMENT_HASH = <<'EOF';
+COMMENT_HASH : <skip: ''> /^[ \t]*#[ \t]*(.*?)[ \t]*\n/
+    { $return = $1; }
+EOF
+
 =back
 
 =cut

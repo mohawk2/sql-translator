@@ -35,12 +35,14 @@ use SQL::Translator::Parser::SQLCommon qw(
   $BQSTRING
   $NUMBER
   $NULL
+  $BLANK_LINE
+  $COMMENT_DD
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $BQSTRING, $NUMBER, $NULL;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $BQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD;
 
 {
     my ( %tables, $table_order );
@@ -59,9 +61,10 @@ eofile : /^\Z/
 statement : use
     | set
     | drop
+    | comment(s?) BLANK_LINE
     | create
-    | <error>
     | comment
+    | <error>
 
 use : /use/i WORD ';'
 
@@ -128,11 +131,7 @@ create_definition : constraint
     | comment
     | <error>
 
-comment : /^\s*--(.*)\n/
-    {
-        my $comment =  $1;
-        $return     = $comment;
-    }
+comment : COMMENT_DD
 
 field : field_name data_type field_qualifier(s?) reference_definition(?)
     {

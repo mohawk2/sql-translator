@@ -90,12 +90,15 @@ use SQL::Translator::Parser::SQLCommon qw(
   $SQSTRING
   $NUMBER
   $NULL
+  $BLANK_LINE
+  $COMMENT_DD
+  $COMMENT_HASH
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH;
 
 { my ( %tables, %indices, %constraints, $table_order, %views, $view_order, %procedures, $proc_order, %triggers, $trigger_order ) }
 
@@ -122,6 +125,7 @@ eofile : /^\Z/
 statement : remark
    | run
     | prompt
+    | comment(s?) BLANK_LINE
     | create
     | comment
     | comment_on_table
@@ -275,15 +279,9 @@ create_definition : table_constraint
     | field
     | <error>
 
-comment : /^\s*(?:#|-{2}).*\n/
-    {
-        my $comment =  $item[1];
-        $comment    =~ s/^\s*(#|-{2})\s*//;
-        $comment    =~ s/\s*$//;
-        $return     = $comment;
-    }
+comment : COMMENT_DD | COMMENT_HASH
 
-comment : /\/\*/ /[^\*]+/ /\*\//
+comment : /\/\*/ /[^\*]+/ /\*\// /\s*/
     {
         my $comment = $item[2];
         $comment    =~ s/^\s*|\s*$//g;

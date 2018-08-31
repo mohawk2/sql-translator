@@ -32,12 +32,15 @@ use SQL::Translator::Parser::SQLCommon qw(
   $SBSTRING
   $NUMBER
   $NULL
+  $BLANK_LINE
+  $COMMENT_DD
+  $COMMENT_HASH
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $SBSTRING, $NUMBER, $NULL;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $SBSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH;
 
 {
     my ( %tables, $table_order, %procedures, $proc_order, %views, $view_order );
@@ -64,7 +67,8 @@ startrule : statement(s) eofile
 
 eofile : /^\Z/
 
-statement : create_table
+statement : comment(s?) BLANK_LINE
+    | create_table
     | create_procedure
     | create_view
     | create_index
@@ -108,13 +112,7 @@ exec : exec_statement(s) GO
 
 exec_statement : /exec/i /[^\n]+/
 
-comment : /^\s*(?:#|-{2}).*\n/
-    {
-        my $comment =  $item[1];
-        $comment    =~ s/^\s*(#|--)\s*//;
-        $comment    =~ s/\s*$//;
-        $return     = $comment;
-    }
+comment : COMMENT_DD | COMMENT_HASH
 
 comment : comment_start comment_middle comment_end
     {

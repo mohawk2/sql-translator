@@ -963,7 +963,7 @@ ok ($@, 'Exception thrown on invalid version string');
     # ensure table comments are sane: only the last comment gets captured
     my $file = "$Bin/data/mysql/sqlfxml-producer-basic.sql";
     ok (-f $file,"File exists");
-    my $tr = SQL::Translator->new( parser => 'MySQL');
+    my $tr = SQL::Translator->new( parser => 'MySQL', trace => 0 );
     ok ($tr->translate($file),'File translated');
     ok (!$tr->error, 'no error');
     ok (my $schema = $tr->schema, 'got schema');

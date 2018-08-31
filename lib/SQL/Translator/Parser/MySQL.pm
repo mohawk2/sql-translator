@@ -148,6 +148,8 @@ use SQL::Translator::Parser::SQLCommon qw(
   $NUMBER
   $NULL
   $BLANK_LINE
+  $COMMENT_DD
+  $COMMENT_HASH
 );
 
 use base qw(Exporter);
@@ -157,7 +159,7 @@ our %type_mapping = ();
 
 use constant DEFAULT_PARSER_VERSION => 40000;
 
-our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER, $NULL, $BLANK_LINE;
+our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH;
 
 {
     my ( $database_name, %tables, $table_order, %views,
@@ -447,13 +449,7 @@ create_definition : constraint
     | comment
     | <error>
 
-comment : <skip: ''> /^[ \t]*(?:#|-{2}).*?\n/
-    {
-        my $comment =  $item[2];
-        $comment    =~ s/^\s*(#|--)\s*//;
-        $comment    =~ s/\s*$//;
-        $return     = $comment;
-    }
+comment : COMMENT_DD | COMMENT_HASH
 
 comment : m{ / \* (?! \!) .*? \* / }xs
     {
@@ -463,17 +459,7 @@ comment : m{ / \* (?! \!) .*? \* / }xs
         $return = $comment;
     }
 
-field_comment : /^\s*(?:#|-{2}).*\n/
-    {
-        my $comment =  $item[1];
-        $comment    =~ s/^\s*(#|--)\s*//;
-        $comment    =~ s/\s*$//;
-        $return     = $comment;
-    }
-
-blank : /\s*/
-
-field : field_comment(s?) field_name data_type field_qualifier(s?) reference_definition(?) on_update(?) field_comment(s?)
+field : /\s*/ comment(s?) field_name data_type field_qualifier(s?) reference_definition(?) on_update(?) /\s*/ comment(s?)
     {
         my %qualifiers  = map { %$_ } @{ $item{'field_qualifier(s?)'} || [] };
         if ( my @type_quals = @{ $item{'data_type'}{'qualifiers'} || [] } ) {
@@ -483,7 +469,7 @@ field : field_comment(s?) field_name data_type field_qualifier(s?) reference_def
         my $null = defined $qualifiers{'not_null'}
                    ? delete $qualifiers{'not_null'} : 1;
 
-        my @comments = ( @{ $item[1] }, (exists $qualifiers{comment} ? delete $qualifiers{comment} : ()) , @{ $item[7] } );
+        my @comments = ( @{ $item[2] }, (exists $qualifiers{comment} ? delete $qualifiers{comment} : ()) , @{ $item[9] } );
 
         $return = {
             supertype   => 'field',

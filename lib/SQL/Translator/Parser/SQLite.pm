@@ -145,12 +145,15 @@ use SQL::Translator::Parser::SQLCommon qw(
   $SQSTRING
   $NUMBER
   $NULL
+  $BLANK_LINE
+  $COMMENT_DD
+  $COMMENT_HASH
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH;
 
 {
     my ( %tables, $table_order, @views, @triggers );
@@ -185,8 +188,9 @@ eofile : /^\Z/
 statement : begin_transaction
     | commit
     | drop
-    | comment
+    | comment(s?) BLANK_LINE
     | create
+    | comment
     | /^\Z/ | { _err ($thisline, $text) }
 
 begin_transaction : /begin/i TRANSACTION(?) SEMICOLON
@@ -201,13 +205,7 @@ view_drop: VIEW if_exists(?) view_name
 
 trg_drop: TRIGGER if_exists(?) trigger_name
 
-comment : /^\s*(?:#|-{2}).*\n/
-    {
-        my $comment =  $item[1];
-        $comment    =~ s/^\s*(#|-{2})\s*//;
-        $comment    =~ s/\s*$//;
-        $return     = $comment;
-    }
+comment : COMMENT_DD | COMMENT_HASH
 
 comment : /\/\*/ /[^\*]+/ /\*\//
     {
@@ -266,24 +264,24 @@ create : CREATE TEMPORARY(?) TABLE table_name '(' definition(s /,/) ')' SEMICOLO
 
 definition : constraint_def | column_def
 
-column_def: comment(s?) NAME type(?) column_constraint_def(s?)
+column_def: /\s*/ comment(s?) NAME type(?) column_constraint_def(s?)
     {
         my $column = {
             supertype      => 'column',
-            name           => $item[2],
-            data_type      => $item[3][0]->{'type'},
-            size           => $item[3][0]->{'size'},
+            name           => $item{NAME},
+            data_type      => $item{'type(?)'}[0]->{'type'},
+            size           => $item{'type(?)'}[0]->{'size'},
             is_nullable    => 1,
             is_primary_key => 0,
             is_unique      => 0,
             check          => '',
             default        => undef,
-            constraints    => $item[4],
-            comments       => $item[1],
+            constraints    => $item{'column_constraint_def(s?)'},
+            comments       => $item{'comment(s?)'},
         };
 
 
-        for my $c ( @{ $item[4] } ) {
+        for my $c ( @{ $column->{constraints} } ) {
             if ( $c->{'type'} eq 'not_null' ) {
                 $column->{'is_nullable'} = 0;
             }

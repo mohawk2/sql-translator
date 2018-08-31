@@ -101,12 +101,15 @@ use SQL::Translator::Parser::SQLCommon qw(
   $SQSTRING
   $NUMBER
   $NULL
+  $BLANK_LINE
+  $COMMENT_DD
+  $COMMENT_HASH
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH;
 
 { my ( %tables, @views, @triggers, $table_order, $field_order) }
 
@@ -126,7 +129,9 @@ startrule : statement(s) eofile {
 
 eofile : /^\Z/
 
-statement : create
+statement :
+  comment(s?) BLANK_LINE
+  | create
   | comment_on_table
   | comment_on_column
   | comment_on_other
@@ -307,13 +312,7 @@ create_definition : field
     | table_constraint
     | <error>
 
-comment : /^\s*(?:#|-{2})(.*)\n/
-    {
-        my $comment =  $item[1];
-        $comment    =~ s/^\s*(#|-*)\s*//;
-        $comment    =~ s/\s*$//;
-        $return     = $comment;
-    }
+comment : COMMENT_DD | COMMENT_HASH
 
 comment_on_table : /comment/i /on/i /table/i table_id /is/i comment_phrase ';'
     {
@@ -363,11 +362,11 @@ column_name : NAME '.' NAME
 comment_phrase : NULL
     | SQSTRING
 
-field : field_comment(s?) field_name data_type field_meta(s?) field_comment(s?)
+field : /\s*/ comment(s?) field_name data_type field_meta(s?) /\s*/ comment(s?)
     {
         my ( $default, @constraints, $is_pk );
         my $is_nullable = 1;
-        for my $meta ( @{ $item[4] } ) {
+        for my $meta ( @{ $item{'field_meta(s?)'} } ) {
             if ( $meta->{'type'} eq 'default' ) {
                 $default = $meta;
                 next;
@@ -382,7 +381,7 @@ field : field_comment(s?) field_name data_type field_meta(s?) field_comment(s?)
             push @constraints, $meta if $meta->{'supertype'} eq 'constraint';
         }
 
-        my @comments = ( @{ $item[1] }, @{ $item[5] } );
+        my @comments = ( @{ $item[2] }, @{ $item[7] } );
 
         $return = {
             supertype         => 'field',
@@ -398,14 +397,6 @@ field : field_comment(s?) field_name data_type field_meta(s?) field_comment(s?)
         }
     }
     | <error>
-
-field_comment : /^\s*(?:#|-{2})(.*)\n/
-    {
-        my $comment =  $item[1];
-        $comment    =~ s/^\s*(#|-*)\s*//;
-        $comment    =~ s/\s*$//;
-        $return     = $comment;
-    }
 
 field_meta : default_val
     | column_constraint

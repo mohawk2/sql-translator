@@ -48,6 +48,7 @@ sub xml_equals
     my ($got, $expect, $msg) = (@_, "XML looks right");
     $got    =~ s/^ +//gm;
     $expect =~ s/^ +//gm;
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
     eq_or_diff $got, $expect, $msg, { context => 1 };
 }
 

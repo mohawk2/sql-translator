@@ -147,6 +147,7 @@ use SQL::Translator::Parser::SQLCommon qw(
   $BQSTRING_BS
   $NUMBER
   $NULL
+  $BLANK_LINE
 );
 
 use base qw(Exporter);
@@ -156,10 +157,10 @@ our %type_mapping = ();
 
 use constant DEFAULT_PARSER_VERSION => 40000;
 
-our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER, $NULL;
+our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER, $NULL, $BLANK_LINE;
 
 {
-    my ( $database_name, %tables, $table_order, @table_comments, %views,
+    my ( $database_name, %tables, $table_order, %views,
         $view_order, %procedures, $proc_order );
     my $delimiter = ';';
 }
@@ -181,11 +182,12 @@ startrule : statement(s) eofile {
 
 eofile : /^\Z/
 
-statement : comment
-    | use
+statement : use
     | set
     | drop
+    | comment(s?) BLANK_LINE
     | create
+    | comment
     | alter
     | insert
     | delimiter
@@ -195,16 +197,13 @@ statement : comment
 use : /use/i NAME "$delimiter"
     {
         $database_name = $item[2];
-        @table_comments = ();
     }
 
 set : /set/i not_delimiter "$delimiter"
-    { @table_comments = () }
 
 drop : /drop/i TABLE not_delimiter "$delimiter"
 
 drop : /drop/i NAME(s) "$delimiter"
-    { @table_comments = () }
 
 bit:
     / 0b([01]{1,64}) | [bB]'([01]{1,64})' /x
@@ -244,9 +243,8 @@ alter_specification : ADD foreign_key_def
     { $return = $item[2] }
 
 create : CREATE /database/i NAME "$delimiter"
-    { @table_comments = () }
 
-create : CREATE TEMPORARY(?) TABLE opt_if_not_exists(?) table_name '(' create_definition(s /,/) /(,\s*)?\)/ table_option(s?) "$delimiter"
+create : comment(s?) CREATE TEMPORARY(?) TABLE opt_if_not_exists(?) table_name '(' create_definition(s /,/) /(,\s*)?\)/ table_option(s?) "$delimiter"
     {
         my $table_name                       = $item{'table_name'};
         die "There is more than one definition for $table_name"
@@ -255,13 +253,12 @@ create : CREATE TEMPORARY(?) TABLE opt_if_not_exists(?) table_name '(' create_de
         $tables{ $table_name }{'order'}      = ++$table_order;
         $tables{ $table_name }{'table_name'} = $table_name;
 
-        if ( @table_comments ) {
-            $tables{ $table_name }{'comments'} = [ @table_comments ];
-            @table_comments = ();
+        if ( @{ $item[1] } ) {
+            $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
         }
 
         my $i = 1;
-        for my $definition ( @{ $item[7] } ) {
+        for my $definition ( @{ $item[8] } ) {
             if ( $definition->{'supertype'} eq 'field' ) {
                 my $field_name = $definition->{'name'};
                 $tables{ $table_name }{'fields'}{ $field_name } =
@@ -304,7 +301,6 @@ opt_if_not_exists : /if not exists/i
 
 create : CREATE UNIQUE(?) /(index|key)/i index_name /on/i table_name '(' field_name(s /,/) ')' "$delimiter"
     {
-        @table_comments = ();
         push @{ $tables{ $item{'table_name'} }{'indices'} },
             {
                 name   => $item[4],
@@ -315,13 +311,9 @@ create : CREATE UNIQUE(?) /(index|key)/i index_name /on/i table_name '(' field_n
     }
 
 create : CREATE /trigger/i NAME not_delimiter "$delimiter"
-    {
-        @table_comments = ();
-    }
 
 create : CREATE PROCEDURE NAME not_delimiter "$delimiter"
     {
-        @table_comments = ();
         my $func_name = $item[3];
         my $owner = '';
         my $sql = "$item[1] $item[2] $item[3] $item[4]";
@@ -337,7 +329,6 @@ PROCEDURE : /procedure/i
 
 create : CREATE or_replace(?) create_view_option(s?) /view/i NAME /as/i view_select_statement "$delimiter"
     {
-        @table_comments = ();
         my $view_name   = $item{'NAME'};
         my $select_sql  = $item{'view_select_statement'};
         my $options     = $item{'create_view_option(s?)'};
@@ -456,9 +447,9 @@ create_definition : constraint
     | comment
     | <error>
 
-comment : /^\s*(?:#|-{2}).*\n/
+comment : <skip: ''> /^[ \t]*(?:#|-{2}).*?\n/
     {
-        my $comment =  $item[1];
+        my $comment =  $item[2];
         $comment    =~ s/^\s*(#|--)\s*//;
         $comment    =~ s/\s*$//;
         $return     = $comment;

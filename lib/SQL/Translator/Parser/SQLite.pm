@@ -153,7 +153,7 @@ our @EXPORT_OK = qw(parse);
 our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
 
 {
-    my ( %tables, $table_order, @table_comments, @views, @triggers );
+    my ( %tables, $table_order, @views, @triggers );
 
     sub _err {
       my $max_lines = 5;

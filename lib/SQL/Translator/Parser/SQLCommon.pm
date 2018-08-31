@@ -146,6 +146,18 @@ our $NULL = <<'EOF';
 NULL : /null/i { 'NULL' }
 EOF
 
+=item $BLANK_LINE
+
+Blank line. This is so that comments before a C<CREATE TABLE> will only
+be one "paragraphs"'s worth.
+
+=cut
+
+push @EXPORT_OK, qw($BLANK_LINE);
+our $BLANK_LINE = <<'EOF';
+BLANK_LINE : <skip: ''> /\A\n/
+EOF
+
 =back
 
 =cut

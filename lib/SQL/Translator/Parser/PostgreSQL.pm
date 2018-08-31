@@ -108,7 +108,7 @@ our @EXPORT_OK = qw(parse);
 
 our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
 
-{ my ( %tables, @views, @triggers, $table_order, $field_order, @table_comments) }
+{ my ( %tables, @views, @triggers, $table_order, $field_order) }
 
 #
 # The "eofile" rule makes the parser fail if any "statement" rule
@@ -194,7 +194,7 @@ update : /update/i statement_body(s?) ';'
 #
 # Create table.
 #
-create : CREATE temporary(?) TABLE table_id '(' create_definition(s? /,/) ')' table_option(s?) ';'
+create : comment(s?) CREATE temporary(?) TABLE table_id '(' create_definition(s? /,/) ')' table_option(s?) ';'
     {
         my $table_info  = $item{'table_id'};
         my $schema_name = $table_info->{'schema_name'};
@@ -203,15 +203,14 @@ create : CREATE temporary(?) TABLE table_id '(' create_definition(s? /,/) ')' ta
         $tables{ $table_name }{'schema_name'} = $schema_name;
         $tables{ $table_name }{'table_name'}  = $table_name;
 
-        $tables{ $table_name }{'temporary'} = $item[2][0];
+        $tables{ $table_name }{'temporary'} = $item[3][0];
 
-        if ( @table_comments ) {
-            $tables{ $table_name }{'comments'} = [ @table_comments ];
-            @table_comments = ();
+        if ( @{ $item[1] } ) {
+            $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
         }
 
         my @constraints;
-        for my $definition ( @{ $item[6] } ) {
+        for my $definition ( @{ $item[7] } ) {
             if ( $definition->{'supertype'} eq 'field' ) {
                 my $field_name = $definition->{'name'};
                 $tables{ $table_name }{'fields'}{ $field_name } =
@@ -231,7 +230,7 @@ create : CREATE temporary(?) TABLE table_id '(' create_definition(s? /,/) ')' ta
             }
         }
 
-        for my $option ( @{ $item[8] } ) {
+        for my $option ( @{ $item[9] } ) {
             $tables{ $table_name }{'table_options(s?)'}{ $option->{'type'} } =
                 $option;
         }
@@ -299,7 +298,6 @@ create : CREATE /TRIGGER/i trigger_name before_or_after database_events /ON/i ta
 # Create anything else (e.g., domain, etc.)
 #
 create : CREATE WORD /[^;]+/ ';'
-    { @table_comments = (); }
 
 using_method : /using/i WORD { $item[2] }
 
@@ -315,7 +313,6 @@ comment : /^\s*(?:#|-{2})(.*)\n/
         $comment    =~ s/^\s*(#|-*)\s*//;
         $comment    =~ s/\s*$//;
         $return     = $comment;
-        push @table_comments, $comment;
     }
 
 comment_on_table : /comment/i /on/i /table/i table_id /is/i comment_phrase ';'
@@ -340,9 +337,6 @@ comment_on_column : /comment/i /on/i /column/i column_name /is/i comment_phrase 
     }
 
 comment_on_other : /comment/i /on/i /\w+/ /\w+/ /is/i comment_phrase ';'
-    {
-        push(@table_comments, $item{'comment_phrase'});
-    }
 
 # [added by cjm 20041019]
 # [TODO: other comment-on types]

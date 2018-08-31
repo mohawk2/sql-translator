@@ -95,7 +95,9 @@ $ans = <<EOXML;
           <extra />
         </constraint>
       </constraints>
-      <comments></comments>
+      <comments>
+        <comment>Table: Basic</comment>
+      </comments>
     </table>
   </tables>
   <views></views>

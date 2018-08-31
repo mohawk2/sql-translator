@@ -43,7 +43,7 @@ our @EXPORT_OK = qw(parse);
 our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $BQSTRING, $NUMBER, $NULL;
 
 {
-    my ( %tables, $table_order, @table_comments );
+    my ( %tables, $table_order );
 }
 
 #
@@ -56,40 +56,35 @@ startrule : statement(s) eofile { \%tables }
 
 eofile : /^\Z/
 
-statement : comment
-    | use
+statement : use
     | set
     | drop
     | create
     | <error>
+    | comment
 
 use : /use/i WORD ';'
-    { @table_comments = () }
 
 set : /set/i /[^;]+/ ';'
-    { @table_comments = () }
 
 drop : /drop/i TABLE /[^;]+/ ';'
 
 drop : /drop/i WORD(s) ';'
-    { @table_comments = () }
 
 create : CREATE /database/i WORD ';'
-    { @table_comments = () }
 
-create : CREATE TABLE table_name '(' create_definition(s /,/) ')' ';'
+create : comment(s?) CREATE TABLE table_name '(' create_definition(s /,/) ')' ';'
     {
         my $table_name                       = $item{'table_name'};
         $tables{ $table_name }{'order'}      = ++$table_order;
         $tables{ $table_name }{'table_name'} = $table_name;
 
-        if ( @table_comments ) {
-            $tables{ $table_name }{'comments'} = [ @table_comments ];
-            @table_comments = ();
+        if ( @{ $item[1] } ) {
+            $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
         }
 
         my $i = 1;
-        for my $definition ( @{ $item[5] } ) {
+        for my $definition ( @{ $item[6] } ) {
             if ( $definition->{'supertype'} eq 'field' ) {
                 my $field_name = $definition->{'name'};
                 $tables{ $table_name }{'fields'}{ $field_name } =
@@ -118,7 +113,6 @@ create : CREATE TABLE table_name '(' create_definition(s /,/) ')' ';'
 
 create : CREATE UNIQUE(?) /(index|key)/i index_name /on/i table_name '(' field_name(s /,/) ')' ';'
     {
-        @table_comments = ();
         push @{ $tables{ $item{'table_name'} }{'indices'} },
             {
                 name   => $item[4],
@@ -138,7 +132,6 @@ comment : /^\s*--(.*)\n/
     {
         my $comment =  $1;
         $return     = $comment;
-        push @table_comments, $comment;
     }
 
 field : field_name data_type field_qualifier(s?) reference_definition(?)

@@ -40,7 +40,7 @@ our @EXPORT_OK = qw(parse);
 our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $SBSTRING, $NUMBER, $NULL;
 
 {
-    my ( %tables, @table_comments, $table_order, %procedures, $proc_order, %views, $view_order );
+    my ( %tables, $table_order, %procedures, $proc_order, %views, $view_order );
 
     sub _err {
       my $max_lines = 5;
@@ -81,7 +81,6 @@ statement : create_table
     | /^\Z/ | { _err ($thisline, $text) }
 
 use : /use/i NAME GO
-    { @table_comments = () }
 
 setuser : /setuser/i USERNAME GO
 
@@ -115,7 +114,6 @@ comment : /^\s*(?:#|-{2}).*\n/
         $comment    =~ s/^\s*(#|--)\s*//;
         $comment    =~ s/\s*$//;
         $return     = $comment;
-        push @table_comments, $comment;
     }
 
 comment : comment_start comment_middle comment_end
@@ -123,7 +121,6 @@ comment : comment_start comment_middle comment_end
         my $comment = $item[2];
         $comment =~ s/^\s*|\s*$//mg;
         $comment =~ s/^\**\s*//mg;
-        push @table_comments, $comment;
     }
 
 comment_start : m#^\s*\/\*#
@@ -141,23 +138,22 @@ if_exists : /if exists/i '(' /select/i 'name' /from/i 'sysobjects' /[^\)]+/ ')'
 #
 # Create table.
 #
-create_table : /create/i /table/i ident '(' create_def(s /,/) ')' lock(?) on_system(?) END_STATEMENT
+create_table : comment(s?) /create/i /table/i ident '(' create_def(s /,/) ')' lock(?) on_system(?) END_STATEMENT
     {
-        my $table_owner = $item[3]{'owner'};
-        my $table_name  = $item[3]{'name'};
+        my $table_owner = $item[4]{'owner'};
+        my $table_name  = $item[4]{'name'};
 
-        if ( @table_comments ) {
-            $tables{ $table_name }{'comments'} = [ @table_comments ];
-            @table_comments = ();
+        if ( @{ $item[1] } ) {
+            $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
         }
 
         $tables{ $table_name }{'order'}  = ++$table_order;
         $tables{ $table_name }{'name'}   = $table_name;
         $tables{ $table_name }{'owner'}  = $table_owner;
-        $tables{ $table_name }{'system'} = $item[7];
+        $tables{ $table_name }{'system'} = $item[8];
 
         my $i = 0;
-        for my $def ( @{ $item[5] } ) {
+        for my $def ( @{ $item[6] } ) {
             if ( $def->{'supertype'} eq 'field' ) {
                 my $field_name = $def->{'name'};
                 $tables{ $table_name }{'fields'}{ $field_name } =
@@ -185,14 +181,12 @@ disable_constraints : if_exists(?) /alter/i /table/i ident /nocheck/i /constrain
 # this is for the normal case
 create_constraint : /create/i constraint END_STATEMENT
     {
-        @table_comments = ();
         push @{ $tables{ $item[2]{'table'} }{'constraints'} }, $item[2];
     }
 
 # and this is for the BEGIN/END case
 create_constraint : /create/i constraint
     {
-        @table_comments = ();
         push @{ $tables{ $item[2]{'table'} }{'constraints'} }, $item[2];
     }
 
@@ -205,13 +199,11 @@ create_constraint : /alter/i /table/i ident /add/i foreign_key_constraint END_ST
 
 create_index : /create/i index
     {
-        @table_comments = ();
         push @{ $tables{ $item[2]{'table'} }{'indices'} }, $item[2];
     }
 
 create_procedure : /create/i PROCEDURE WORD not_go GO
     {
-        @table_comments = ();
         my $proc_name = $item[3];
         my $owner = '';
         my $sql = "$item[1] $item[2] $proc_name $item[4]";
@@ -224,7 +216,6 @@ create_procedure : /create/i PROCEDURE WORD not_go GO
 
 create_procedure : /create/i PROCEDURE '[' WORD '].' WORD not_go GO
     {
-        @table_comments = ();
         my $proc_name = $item[6];
         my $owner = $item[4];
         my $sql = "$item[1] $item[2] [$owner].$proc_name $item[7]";
@@ -240,7 +231,6 @@ PROCEDURE : /procedure/i
 
 create_view : /create/i /view/i WORD not_go GO
     {
-        @table_comments = ();
         my $view_name = $item[3];
         my $sql = "$item[1] $item[2] $item[3] $item[4]";
 

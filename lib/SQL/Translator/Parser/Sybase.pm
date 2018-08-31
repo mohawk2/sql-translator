@@ -40,7 +40,7 @@ our @EXPORT_OK = qw(parse);
 our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $NUMBER, $NULL;
 
 {
-    my ( %tables, @table_comments, $table_order );
+    my ( %tables, $table_order );
 }
 
 startrule : statement(s) eofile { \%tables }
@@ -61,7 +61,6 @@ statement : create_table
     | <error>
 
 use : /use/i WORD GO
-    { @table_comments = () }
 
 setuser : /setuser/i NAME GO
 
@@ -92,7 +91,7 @@ comment : comment_start comment_middle comment_end
         my $comment = $item[2];
         $comment =~ s/^\s*|\s*$//mg;
         $comment =~ s/^\**\s*//mg;
-        push @table_comments, $comment;
+        $return = $comment;
     }
 
 comment_start : /^\s*\/\*/
@@ -104,23 +103,22 @@ comment_middle : m{([^*]+|\*(?!/))*}
 #
 # Create table.
 #
-create_table : /create/i /table/i ident '(' create_def(s /,/) ')' lock(?) on_system(?) GO
+create_table : comment(s?) /create/i /table/i ident '(' create_def(s /,/) ')' lock(?) on_system(?) GO
     {
-        my $table_owner = $item[3]{'owner'};
-        my $table_name  = $item[3]{'name'};
+        my $table_owner = $item[4]{'owner'};
+        my $table_name  = $item[4]{'name'};
 
-        if ( @table_comments ) {
-            $tables{ $table_name }{'comments'} = [ @table_comments ];
-            @table_comments = ();
+        if ( @{ $item[1] } ) {
+            $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
         }
 
         $tables{ $table_name }{'order'}  = ++$table_order;
         $tables{ $table_name }{'name'}   = $table_name;
         $tables{ $table_name }{'owner'}  = $table_owner;
-        $tables{ $table_name }{'system'} = $item[7];
+        $tables{ $table_name }{'system'} = $item[8];
 
         my $i = 0;
-        for my $def ( @{ $item[5] } ) {
+        for my $def ( @{ $item[6] } ) {
             if ( $def->{'supertype'} eq 'field' ) {
                 my $field_name = $def->{'name'};
                 $tables{ $table_name }{'fields'}{ $field_name } =
@@ -145,20 +143,15 @@ create_table : /create/i /table/i ident '(' create_def(s /,/) ')' lock(?) on_sys
 
 create_constraint : /create/i constraint
     {
-        @table_comments = ();
         push @{ $tables{ $item[2]{'table'} }{'constraints'} }, $item[2];
     }
 
 create_index : /create/i index
     {
-        @table_comments = ();
         push @{ $tables{ $item[2]{'table'} }{'indices'} }, $item[2];
     }
 
 create_procedure : /create/i /procedure/i procedure_body GO
-    {
-        @table_comments = ();
-    }
 
 procedure_body : not_go(s)
 

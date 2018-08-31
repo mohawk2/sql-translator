@@ -97,7 +97,7 @@ our @EXPORT_OK = qw(parse);
 
 our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL;
 
-{ my ( %tables, %indices, %constraints, $table_order, @table_comments, %views, $view_order, %procedures, $proc_order, %triggers, $trigger_order ) }
+{ my ( %tables, %indices, %constraints, $table_order, %views, $view_order, %procedures, $proc_order, %triggers, $trigger_order ) }
 
 #
 # The "eofile" rule makes the parser fail if any "statement" rule
@@ -123,7 +123,7 @@ statement : remark
    | run
     | prompt
     | create
-    | table_comment
+    | comment
     | comment_on_table
     | comment_on_column
     | alter
@@ -138,20 +138,17 @@ alter: /alter/i TABLE table_name /add/i table_constraint ';'
     }
 
 alter : /alter/i WORD /[^;]+/ ';'
-    { @table_comments = () }
 
 drop : /drop/i WORD(s) NAME WORD(s?) ';'
-    { @table_comments = () }
 
-create : create_table table_name '(' create_definition(s /,/) ')' table_option(s?) ';'
+create : comment(s?) create_table table_name '(' create_definition(s /,/) ')' table_option(s?) ';'
     {
         my $table_name                       = $item{'table_name'};
         $tables{ $table_name }{'order'}      = ++$table_order;
         $tables{ $table_name }{'table_name'} = $table_name;
 
-        if ( @table_comments ) {
-            $tables{ $table_name }{'comments'} = [ @table_comments ];
-            @table_comments = ();
+        if ( @{ $item[1] } ) {
+            $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
         }
 
         my $i = 1;
@@ -214,7 +211,6 @@ index_expr: parens_name_list
 
 create : /create/i /or replace/i /trigger/i table_name not_end m#^/$#im
         {
-          @table_comments = ();
         my $trigger_name = $item[4];
         # Hack to strip owner from trigger name
         $trigger_name =~ s#.*\.##;
@@ -229,7 +225,6 @@ create : /create/i /or replace/i /trigger/i table_name not_end m#^/$#im
 
 create : /create/i /or replace/i /procedure/i table_name not_end m#^/$#im
    {
-      @table_comments = ();
         my $proc_name = $item[4];
         # Hack to strip owner from procedure name
         $proc_name =~ s#.*\.##;
@@ -246,7 +241,6 @@ not_end: m#.*?(?=^/$)#ism
 
 create : /create/i /or replace/i /force/i /view/i table_name not_delimiter ';'
    {
-      @table_comments = ();
         my $view_name = $item[5];
         # Hack to strip owner from view name
         $view_name =~ s#.*\.##;
@@ -261,7 +255,6 @@ not_delimiter: /.*?(?=;)/is
 
 # Create anything else (e.g., domain, function, etc.)
 create : ...!create_table ...!create_index /create/i WORD /[^;]+/ ';'
-    { @table_comments = () }
 
 create_index : /create/i UNIQUE(?) /index/i
    { $return = @{$item[2]} }
@@ -281,13 +274,6 @@ table_name : NAME '.' NAME
 create_definition : table_constraint
     | field
     | <error>
-
-table_comment : comment
-    {
-        my $comment = $item[1];
-        $return     = $comment;
-        push @table_comments, $comment;
-    }
 
 comment : /^\s*(?:#|-{2}).*\n/
     {

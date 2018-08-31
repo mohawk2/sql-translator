@@ -1,5 +1,7 @@
 Changes for SQL::Translator
 
+ * MySQL parser now supports table-comments
+
 1.60 - 2019-05-29
  * No changes since 1.59_01
 

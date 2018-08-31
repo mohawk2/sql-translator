@@ -959,4 +959,19 @@ ok ($@, 'Exception thrown on invalid version string');
     ok (my $schema = $tr->schema, 'got schema');
 }
 
+{
+    # ensure table comments are sane: only the last comment gets captured
+    my $file = "$Bin/data/mysql/sqlfxml-producer-basic.sql";
+    ok (-f $file,"File exists");
+    my $tr = SQL::Translator->new( parser => 'MySQL');
+    ok ($tr->translate($file),'File translated');
+    ok (!$tr->error, 'no error');
+    ok (my $schema = $tr->schema, 'got schema');
+    is( $schema->is_valid, 1, 'Schema is valid' );
+    my @tables = $schema->get_tables;
+    is( scalar @tables, 1, 'Right number of tables (1)' );
+    my $table  = shift @tables;
+    is( $table->comments, 'Table: Basic', 'Table comment OK' );
+}
+
 done_testing;

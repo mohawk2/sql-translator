@@ -14,7 +14,7 @@ use FindBin qw/$Bin/;
 #=============================================================================
 
 BEGIN {
-    maybe_plan(4,
+    maybe_plan(5,
         'SQL::Translator::Producer::DB2',
         'Test::Differences',
     )
@@ -60,3 +60,18 @@ is($add_field, 'ALTER TABLE mytable ADD COLUMN myfield VARCHAR(10)', 'Add field 
 
 my $drop_field = SQL::Translator::Producer::DB2::drop_field($field2);
 is($drop_field, '', 'Drop field works');
+
+my $field3 = SQL::Translator::Schema::Field->new( name => 'myfield2',
+                                                  table => $table,
+                                                  data_type => 'VARCHAR',
+                                                  size => 10,
+                                                  default_value => q{you're},
+                                                  is_auto_increment => 0,
+                                                  is_nullable => 1,
+                                                  is_foreign_key => 0,
+                                                  is_unique => 0 );
+
+my $field3_sql = SQL::Translator::Producer::DB2::create_field($field3);
+
+is($field3_sql, q{myfield2 VARCHAR(10) DEFAULT 'you''re'}, 'Single-quote quoting works');
+

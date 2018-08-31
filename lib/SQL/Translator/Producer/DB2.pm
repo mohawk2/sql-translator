@@ -296,10 +296,17 @@ sub create_field
         $field->default_value =~ /\Qnow()\E/i ?
         ' DEFAULT CURRENT TIMESTAMP' : defined $field->default_value ?
         (" DEFAULT " . ($data_type =~ /(INT|DOUBLE)/i ?
-                        $field->default_value : "'" . $field->default_value . "'")
+                        $field->default_value : "'" . quote_double($field->default_value) . "'")
          ) : '';
 
     return $field_def;
+}
+
+sub quote_double
+{
+    my $text = shift;
+    $text =~ s#'#''#g;
+    return $text;
 }
 
 sub create_index

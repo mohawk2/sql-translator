@@ -14,7 +14,182 @@ SQL::Translator::Parser::DB2 - parser for DB2
 
 =head1 DESCRIPTION
 
-This is a grammar for parsing CREATE statements for DB2
+This is a grammar for parsing CREATE statements for DB2.
+
+The C<CREATE TABLE> syntax is at L<https://www.ibm.com/support/knowledgecenter/en/SSEPEK_12.0.0/sqlref/src/tpc/db2z_sql_createtable.html>
+
+  >>-CREATE TABLE--table-name------------------------------------->
+
+         .-,------------------------------.
+         V                                |
+  >--+-(---+-| column-definition |------+-+-)-----+--------------->
+     |     +-| period-definition |------+         |
+     |     +-| unique-constraint |------+         |
+     |     +-| referential-constraint |-+         |
+     |     '-| check-constraint |-------'         |
+     +-LIKE--+-table-name-+--+------------------+-+
+     |       '-view-name--'  '-| copy-options |-' |
+     +-| as-result-table |--+------------------+--+
+     |                      '-| copy-options |-'  |
+     '-| materialized-query-definition |----------'
+
+     .-------------------------------------------------------------.
+     V  (1)                                                        |
+  >---------+----------------------------------------------------+-+-><
+            +-+-IN--+----------------+-table-space-name-+--------+
+            | |     '-database-name.-'                  |        |
+            | '-IN DATABASE--database-name--------------'        |
+            +-| partitioning-clause |----------------------------+
+            +-| organization-clause |----------------------------+
+            |                         .-WITH ROW ATTRIBUTES----. |
+            +-EDITPROC--program-name--+------------------------+-+
+            |                         '-WITHOUT ROW ATTRIBUTES-' |
+            +-VALIDPROC--program-name----------------------------+
+            | .-AUDIT NONE----.                                  |
+            +-+---------------+----------------------------------+
+            | +-AUDIT CHANGES-+                                  |
+            | '-AUDIT ALL-----'                                  |
+            +-OBID--integer--------------------------------------+
+            | .-DATA CAPTURE NONE----.                           |
+            +-+----------------------+---------------------------+
+            | '-DATA CAPTURE CHANGES-'                           |
+            +-WITH RESTRICT ON DROP------------------------------+
+            +-CCSID--+-ASCII---+---------------------------------+
+            |        +-EBCDIC--+                                 |
+            |        '-UNICODE-'                                 |
+            |                 .-CARDINALITY-.                    |
+            | .-NOT VOLATILE--+-------------+-.                  |
+            +-+-------------------------------+------------------+
+            | |           .-CARDINALITY-.     |                  |
+            | '-VOLATILE--+-------------+-----'                  |
+            | .-LOGGED-----.                                     |
+            +-+------------+-------------------------------------+
+            | '-NOT LOGGED-'                                     |
+            | .-COMPRESS NO--.                                   |
+            +-+--------------+-----------------------------------+
+            | '-COMPRESS YES-'                                   |
+            |         .-NO--.                                    |
+            +-APPEND--+-YES-+------------------------------------+
+            +-DSSIZE--integer--G---------------------------------+
+            +-BUFFERPOOL--bpname---------------------------------+
+            +-MEMBER CLUSTER-------------------------------------+
+            | .-TRACKMOD YES-.                                   |
+            +-+--------------+-----------------------------------+
+            | '-TRACKMOD NO--'                                   |
+            +-+--------------------------+-----------------------+
+            | |                  (2) (3) |                       |
+            | +-PAGENUM RELATIVE---------+                       |
+            | '-PAGENUM ABSOLUTE---------'                       |
+            | .-NO KEY LABEL--------------.                      |
+            '-+---------------------------+----------------------'
+              '-KEY LABEL--key-label-name-'
+
+  Notes:
+  The same clause must not be specified more than once.
+  When creating a partition-by-range table, the default value is determined by the subsystem parameter PAGESET_PAGENUM, which has a default of 'A' for absolute page numbering. If PAGESET_PAGENUM is set to 'R', the default value is PAGENUM RELATIVE.
+  PAGENUM RELATIVE is allowed only if a partitioning clause is specified.
+  column-definition:
+
+                                (1)
+  >>-column-name--| data-type |----------------------------------->
+
+     .--------------------------------------------------------------------------------------.
+     V  (2)                                                                                 |
+  >---------+-----------------------------------------------------------------------------+-+-><
+            +-NOT NULL--------------------------------------------------------------------+
+            +-| generated-clause |--------------------------------------------------------+
+            +-| column-constraint |-------------------------------------------------------+
+            | .-WITH-.                                                                    |
+            +-+------+--DEFAULT--+------------------------------------------------------+-+
+            |                    +-constant---------------------------------------------+ |
+            |                    +-+-SESSION_USER-+-------------------------------------+ |
+            |                    | '-USER---------'                                     | |
+            |                    +-CURRENT SQLID----------------------------------------+ |
+            |                    +-NULL-------------------------------------------------+ |
+            |                    |  (3)                                                 | |
+            |                    '-------cast-function-name--(--+-constant---------+--)-' |
+            |                                                   +-+-SESSION_USER-+-+      |
+            |                                                   | '-USER---------' |      |
+            |                                                   +-CURRENT SQLID----+      |
+            |                                                   '-NULL-------------'      |
+            +-FIELDPROC--program-name--+------------------+-------------------------------+
+            |                          |   .-,--------.   |                               |
+            |                          |   V          |   |                               |
+            |                          '-(---constant-+-)-'                               |
+            |                   (4)                                                       |
+            +-AS SECURITY LABEL-----------------------------------------------------------+
+            +-IMPLICITLY HIDDEN-----------------------------------------------------------+
+            |                        (5)                                                  |
+            '-INLINE LENGTH--integer------------------------------------------------------'
+
+  [Notes omitted]
+
+  Read syntax diagram
+  >>-+-| built-in-type |--+--------------------------------------><
+     '-distinct-type-name-'
+
+  built-in-type:
+
+  >>-+-+-SMALLINT----+---------------------------------------------------------------------+-><
+     | +-+-INTEGER-+-+                                                                     |
+     | | '-INT-----' |                                                                     |
+     | '-BIGINT------'                                                                     |
+     |              .-(5,0)--------------------.                                           |
+     +-+-DECIMAL-+--+--------------------------+-------------------------------------------+
+     | +-DEC-----+  '-(integer-+-----------+-)-'                                           |
+     | '-NUMERIC-'             '-, integer-'                                               |
+     |          .-(53)------.                                                              |
+     +-+-FLOAT--+-----------+--+-----------------------------------------------------------+
+     | |        '-(integer)-'  |                                                           |
+     | +-REAL------------------+                                                           |
+     | |         .-PRECISION-. |                                                           |
+     | '-DOUBLE--+-----------+-'                                                           |
+     |           .-(34)-.                                                                  |
+     +-DECFLOAT--+------+------------------------------------------------------------------+
+     |           '-(16)-'                                                                  |
+     |                    .-(1)-------.                                                    |
+     +-+-+-+-CHARACTER-+--+-----------+----------+--+----------------------+-------------+-+
+     | | | '-CHAR------'  '-(integer)-'          |  +-FOR--+-SBCS--+--DATA-+             | |
+     | | '-+-+-CHARACTER-+--VARYING-+--(integer)-'  |      +-MIXED-+       |             | |
+     | |   | '-CHAR------'          |               |      '-BIT---'       |             | |
+     | |   '-VARCHAR----------------'               |            (1)       |             | |
+     | |                                            '-CCSID 1208-----------'             | |
+     | |                                  .-(1M)-------------.                           | |
+     | '-+-+-CHARACTER-+--LARGE OBJECT-+--+------------------+--+----------------------+-' |
+     |   | '-CHAR------'               |  '-(integer-+---+-)-'  +-FOR--+-SBCS--+--DATA-+   |
+     |   '-CLOB------------------------'             +-K-+      |      +-MIXED-+       |   |
+     |                                               +-M-+      |      '-BIT---'       |   |
+     |                                               '-G-'      |            (1)       |   |
+     |                                                          '-CCSID 1208-----------'   |
+     |            .-(1)-------.                                                            |
+     +-+-GRAPHIC--+-----------+-------+--+----------------+--------------------------------+
+     | |          '-(integer)-'       |  |            (1) |                                |
+     | +-VARGRAPHIC--(--integer--)----+  '-CCSID 1200-----'                                |
+     | |         .-(1M)-------------. |                                                    |
+     | '-DBCLOB--+------------------+-'                                                    |
+     |           '-(integer-+---+-)-'                                                      |
+     |                      +-K-+                                                          |
+     |                      +-M-+                                                          |
+     |                      '-G-'                                                          |
+     |           .-(1)-------.                                                             |
+     +-+-BINARY--+-----------+-------------------------+-----------------------------------+
+     | |         '-(integer)-'                         |                                   |
+     | +-+-BINARY VARYING-+-(integer)------------------+                                   |
+     | | '-VARBINARY------'                            |                                   |
+     | |                          .-(1M)-------------. |                                   |
+     | '-+-BINARY LARGE OBJECT-+--+------------------+-'                                   |
+     |   '-BLOB----------------'  '-(integer-+---+-)-'                                     |
+     |                                       +-K-+                                         |
+     |                                       +-M-+                                         |
+     |                                       '-G-'                                         |
+     +-+-DATE------------------------------------------------+-----------------------------+
+     | +-TIME------------------------------------------------+                             |
+     | |            .-(--6--)-------.  .-WITHOUT TIME ZONE-. |                             |
+     | '-TIMESTAMP--+---------------+--+-------------------+-'                             |
+     |              '-(--integer--)-'  '-WITH TIME ZONE----'                               |
+     +-ROWID-------------------------------------------------------------------------------+
+     '-XML--+-----------------------------+------------------------------------------------'
+            '-(--| XML-type-modifier |--)-'
 
 =cut
 
@@ -363,9 +538,6 @@ func_args: expression
 
 sysibm_function: ( /ABS/i | /ABSVAL/i )
                 | /AVG/i
-                | /BIGINT/i
-                | /BLOB/i
-                | /CHAR/i
                 | /CLOB/i
                 | /COALESCE/i
                 | ( /CONCAT/ | '||' )
@@ -373,11 +545,8 @@ sysibm_function: ( /ABS/i | /ABSVAL/i )
                 | /COUNT/i
                 | /COUNT_BIG/i
                 | (/COVARIANCE/i | /COVAR/i )
-                | /DATE/i
                 | /DAY/i
                 | /DAYS/i
-                | /DBCLOB/i
-                | ( /DECIMAL/i | /DEC/i )
                 | /DECRYPT_BIN/i
                 | /DECRYPT_CHAR/i
                 | /DEREF/i
@@ -390,18 +559,14 @@ sysibm_function: ( /ABS/i | /ABSVAL/i )
                 | /DLURLSCHEME/i
                 | /DLURLSERVER/i
                 | /DLVALUE/i
-                | ( /DOUBLE/i | /DOUBLE_PRECISION/i )
                 | /ENCRYPT/i
                 | /EVENT_MON_STATE/i
-                | /FLOAT/i
                 | /GETHINT/i
                 | /GENERATE_UNIQUE/i
-                | /GRAPHIC/i
                 | /GROUPING/i
                 | /HEX/i
                 | /HOUR/i
                 | /IDENTITY_VAL_LOCAL/i
-                | ( /INTEGER/i | /INT/ )
                 | ( /LCASE/i | /LOWER/ )
                 | /LENGTH/i
                 | /LONG_VARCHAR/i
@@ -418,7 +583,6 @@ sysibm_function: ( /ABS/i | /ABSVAL/i )
                 | /PARTITON/i
                 | /POSSTR/i
                 | /RAISE_ERROR/i
-                | /REAL/i
                 | /REC2XML/i
                 | /REGR_AVGX/i
                 | /REGR_AVGY/i
@@ -431,24 +595,45 @@ sysibm_function: ( /ABS/i | /ABSVAL/i )
                 | /REGR_SYY/i
                 | /RTRIM/i
                 | /SECOND/i
-                | /SMALLINT/i
                 | /STDDEV/i
                 | /SUBSTR/i
                 | /SUM/i
                 | /TABLE_NAME/i
                 | /TABLE_SCHEMA/i
-                | /TIME/i
-                | /TIMESTAMP/i
                 | /TRANSLATE/i
                 | /TYPE_ID/i
                 | /TYPE_NAME/i
                 | /TYPE_SCHEMA/i
                 | ( /UCASE/i | /UPPER/i )
                 | /VALUE/i
-                | /VARCHAR/i
-                | /VARGRAPHIC/i
                 | ( /VARIANCE/i | /VAR/i )
                 | /YEAR/i
+                | builtin_types
+
+builtin_types: /SMALLINT/i
+                | ( /INTEGER/i | /INT/ )
+                | /BIGINT/i
+                | ( /DECIMAL/i | /DEC/i )
+                | /NUMERIC/i
+                | /FLOAT/i
+                | /REAL/i
+                | ( /DOUBLE/i | /DOUBLE_PRECISION/i )
+                | /DECFLOAT/i
+                | ( /CHAR/i | /CHARACTER/i )
+                | /VARCHAR/i
+                | ( /CHAR/i | /CHARACTER/i ) /LARGE/i /OBJECT/i
+                | /GRAPHIC/i
+                | /VARGRAPHIC/i
+                | /DBCLOB/i
+                | /BINARY/i
+                | /VARBINARY/i
+                | /BINARY/i /LARGE/i /OBJECT/i
+                | /DATE/i
+                | /TIME/i
+                | /BLOB/i
+                | /TIMESTAMP/i
+                | /ROWID/i
+                | /XML/i
 
 sysfun: ( /ABS/i | /ABSVAL/i )
                 | /ACOS/i

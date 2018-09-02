@@ -200,8 +200,10 @@ drop : /drop/i NAME(s) "$delimiter"
     { @table_comments = () }
 
 bit:
-    /(b'[01]{1,64}')/ |
-    /(b"[01]{1,64}")/
+    / 0b([01]{1,64}) | [bB]'([01]{1,64})' /x
+    {
+        $return  = length $1 ? $1 : $2;
+    }
 
 string :
   # MySQL strings, unlike common SQL strings, can be double-quoted or
@@ -677,14 +679,13 @@ default_val :
         $return =  $item[2];
     }
     |
-    /default/i VALUE
+    /default/i bit
     {
         $return  =  $item[2];
     }
     |
-    /default/i bit
+    /default/i VALUE
     {
-        $item[2] =~ s/b['"]([01]+)['"]/$1/g;
         $return  =  $item[2];
     }
     |

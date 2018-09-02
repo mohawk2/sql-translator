@@ -84,7 +84,7 @@ BEGIN {
               date timestamp,
               time_stamp2 timestamp,
               foo_enabled bit(1) default b'0',
-              bar_enabled bit(1) default b"1",
+              bar_enabled bit(1) default 0b1,
               long_foo_enabled bit(10) default b'1010101',
               KEY (i1),
               UNIQUE (date, i1) USING BTREE,

@@ -93,12 +93,13 @@ use SQL::Translator::Parser::SQLCommon qw(
   $BLANK_LINE
   $COMMENT_DD
   $COMMENT_HASH
+  $COMMENT_SSTAR
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH, $COMMENT_SSTAR;
 
 { my ( %tables, %indices, %constraints, $table_order, %views, $view_order, %procedures, $proc_order, %triggers, $trigger_order ) }
 
@@ -145,7 +146,7 @@ alter : /alter/i WORD /[^;]+/ ';'
 
 drop : /drop/i WORD(s) NAME WORD(s?) ';'
 
-create : comment(s?) create_table table_name '(' create_definition(s /,/) ')' table_option(s?) ';'
+create : comment(s?) /\s*/ create_table table_name '(' create_definition(s /,/) ')' table_option(s?) ';'
     {
         my $table_name                       = $item{'table_name'};
         $tables{ $table_name }{'order'}      = ++$table_order;
@@ -279,14 +280,7 @@ create_definition : table_constraint
     | field
     | <error>
 
-comment : COMMENT_DD | COMMENT_HASH
-
-comment : /\/\*/ /[^\*]+/ /\*\// /\s*/
-    {
-        my $comment = $item[2];
-        $comment    =~ s/^\s*|\s*$//g;
-        $return = $comment;
-    }
+comment : COMMENT_DD | COMMENT_HASH | COMMENT_SSTAR
 
 remark : /^REM\s+.*\n/
 
@@ -314,7 +308,7 @@ column_name : NAME '.' NAME
 
 comment_phrase : SQSTRING
 
-field : comment(s?) field_name data_type field_meta(s?) comment(s?)
+field : /\s*/ comment(s?) /\s*/ field_name data_type field_meta(s?) comment(s?)
     {
         my ( $is_pk, $default, @constraints );
         my $null = 1;
@@ -334,7 +328,7 @@ field : comment(s?) field_name data_type field_meta(s?) comment(s?)
             push @constraints, $meta if $meta->{'supertype'} eq 'constraint';
         }
 
-        my @comments = ( @{ $item[1] }, @{ $item[5] } );
+        my @comments = ( @{ $item[2] }, @{ $item[7] } );
 
         $return = {
             type           => 'field',

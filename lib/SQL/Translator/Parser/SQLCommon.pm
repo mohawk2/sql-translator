@@ -182,6 +182,22 @@ COMMENT_HASH : <skip: ''> /^[ \t]*#[ \t]*(.*?)[ \t]*\n/
     { $return = $1; }
 EOF
 
+=item $COMMENT_SSTAR
+
+Multi-line comment surrounded by C</*> and C<*/> minus starting/finishing
+whitespace, and any C<*> at the start of each line. Also absorbs any
+spaces or tabs up to optional next C<\n>.
+
+=cut
+
+push @EXPORT_OK, qw($COMMENT_SSTAR);
+our $COMMENT_SSTAR = <<'EOF';
+COMMENT_SSTAR : <skip: ''> m{^[ \t]*/\* \s*}x m{(.*?) \s* \*/[ \t]*\n?}xs
+    {
+        ($return = $1) =~ s/^\s*\**\s*//mg;
+    }
+EOF
+
 =back
 
 =cut

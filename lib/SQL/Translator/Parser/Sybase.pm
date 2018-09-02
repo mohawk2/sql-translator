@@ -32,12 +32,15 @@ use SQL::Translator::Parser::SQLCommon qw(
   $SBSTRING
   $NUMBER
   $NULL
+  $COMMENT_DD
+  $COMMENT_SSTAR
+  $BLANK_LINE
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $NUMBER, $NULL;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $NUMBER, $NULL, $COMMENT_DD, $COMMENT_SSTAR, $BLANK_LINE;
 
 {
     my ( %tables, $table_order );
@@ -47,7 +50,8 @@ startrule : statement(s) eofile { \%tables }
 
 eofile : /^\Z/
 
-statement : create_table
+statement : comment(s?) BLANK_LINE
+    | create_table
     | create_procedure
     | create_index
     | create_constraint
@@ -86,39 +90,27 @@ exec : exec_statement(s) GO
 
 exec_statement : /exec/i /[^\n]+/
 
-comment : comment_start comment_middle comment_end
-    {
-        my $comment = $item[2];
-        $comment =~ s/^\s*|\s*$//mg;
-        $comment =~ s/^\**\s*//mg;
-        $return = $comment;
-    }
-
-comment_start : /^\s*\/\*/
-
-comment_end : /\s*\*\//
-
-comment_middle : m{([^*]+|\*(?!/))*}
+comment : COMMENT_DD | COMMENT_SSTAR
 
 #
 # Create table.
 #
-create_table : comment(s?) /create/i /table/i ident '(' create_def(s /,/) ')' lock(?) on_system(?) GO
+create_table : /\s*/ comment(s?) /create/i /table/i ident '(' create_def(s /,/) ')' lock(?) on_system(?) GO
     {
-        my $table_owner = $item[4]{'owner'};
-        my $table_name  = $item[4]{'name'};
+        my $table_owner = $item{ident}{'owner'};
+        my $table_name  = $item{ident}{'name'};
 
-        if ( @{ $item[1] } ) {
-            $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
+        if ( @{ $item{'comment(s?)'} } ) {
+            $tables{ $table_name }{'comments'} = [ @{ $item{'comment(s?)'} } ];
         }
 
         $tables{ $table_name }{'order'}  = ++$table_order;
         $tables{ $table_name }{'name'}   = $table_name;
         $tables{ $table_name }{'owner'}  = $table_owner;
-        $tables{ $table_name }{'system'} = $item[8];
+        $tables{ $table_name }{'system'} = $item{'lock(?)'};
 
         my $i = 0;
-        for my $def ( @{ $item[6] } ) {
+        for my $def ( @{ $item{'create_def(s)'} } ) {
             if ( $def->{'supertype'} eq 'field' ) {
                 my $field_name = $def->{'name'};
                 $tables{ $table_name }{'fields'}{ $field_name } =

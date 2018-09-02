@@ -148,12 +148,13 @@ use SQL::Translator::Parser::SQLCommon qw(
   $BLANK_LINE
   $COMMENT_DD
   $COMMENT_HASH
+  $COMMENT_SSTAR
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH, $COMMENT_SSTAR;
 
 {
     my ( %tables, $table_order, @views, @triggers );
@@ -205,14 +206,7 @@ view_drop: VIEW if_exists(?) view_name
 
 trg_drop: TRIGGER if_exists(?) trigger_name
 
-comment : COMMENT_DD | COMMENT_HASH
-
-comment : /\/\*/ /[^\*]+/ /\*\//
-    {
-        my $comment = $item[2];
-        $comment    =~ s/^\s*|\s*$//g;
-        $return = $comment;
-    }
+comment : COMMENT_DD | COMMENT_HASH | COMMENT_SSTAR
 
 #
 # Create Index

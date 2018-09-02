@@ -150,6 +150,7 @@ use SQL::Translator::Parser::SQLCommon qw(
   $BLANK_LINE
   $COMMENT_DD
   $COMMENT_HASH
+  $COMMENT_SSTAR
 );
 
 use base qw(Exporter);
@@ -159,7 +160,7 @@ our %type_mapping = ();
 
 use constant DEFAULT_PARSER_VERSION => 40000;
 
-our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH;
+our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH, $COMMENT_SSTAR;
 
 {
     my ( $database_name, %tables, $table_order, %views,
@@ -449,15 +450,7 @@ create_definition : constraint
     | comment
     | <error>
 
-comment : COMMENT_DD | COMMENT_HASH
-
-comment : m{ / \* (?! \!) .*? \* / }xs
-    {
-        my $comment = $item[2];
-        $comment = substr($comment, 0, -2);
-        $comment    =~ s/^\s*|\s*$//g;
-        $return = $comment;
-    }
+comment : COMMENT_DD | COMMENT_HASH | COMMENT_SSTAR
 
 field : /\s*/ comment(s?) field_name data_type field_qualifier(s?) reference_definition(?) on_update(?) /\s*/ comment(s?)
     {

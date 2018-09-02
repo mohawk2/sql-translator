@@ -488,8 +488,7 @@ field : field_comment(s?) field_name data_type field_qualifier(s?) reference_def
         }
 
         my $null = defined $qualifiers{'not_null'}
-                   ? $qualifiers{'not_null'} : 1;
-        delete $qualifiers{'not_null'};
+                   ? delete $qualifiers{'not_null'} : 1;
 
         my @comments = ( @{ $item[1] }, (exists $qualifiers{comment} ? delete $qualifiers{comment} : ()) , @{ $item[7] } );
 
@@ -615,7 +614,6 @@ reference_option: /restrict/i |
     /set null/i  |
     /no action/i |
     /set default/i
-    { $item[1] }
 
 index : normal_index
     | fulltext_index
@@ -699,19 +697,13 @@ foreign_key_def : foreign_key_def_begin parens_field_list reference_definition
     }
 
 foreign_key_def_begin : /constraint/i /foreign key/i NAME
-    { $return = $item[3] }
+    { $return = $item{NAME} }
     |
-    /constraint/i NAME /foreign key/i
-    { $return = $item[2] }
+    /constraint/i NAME(?) /foreign key/i
+    { ($return) = @{$item{'NAME(?)'} || ['']} }
     |
-    /constraint/i /foreign key/i
-    { $return = '' }
-    |
-    /foreign key/i NAME
-    { $return = $item[2] }
-    |
-    /foreign key/i
-    { $return = '' }
+    /foreign key/i NAME(?)
+    { ($return) = @{$item{'NAME(?)'} || ['']} }
 
 primary_key_def : primary_key index_type(?) '(' name_with_opt_paren(s /,/) ')' index_type(?)
     {

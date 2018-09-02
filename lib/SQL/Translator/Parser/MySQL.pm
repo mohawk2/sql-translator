@@ -465,10 +465,6 @@ comment : m{ / \* (?! \!) .*? \* / }xs
         $return = $comment;
     }
 
-comment_like_command : m{/\*!(\d+)?}s
-
-comment_end : m{ \* / }xs
-
 field_comment : /^\s*(?:#|-{2}).*\n/
     {
         my $comment =  $item[1];
@@ -476,7 +472,6 @@ field_comment : /^\s*(?:#|-{2}).*\n/
         $comment    =~ s/\s*$//;
         $return     = $comment;
     }
-
 
 blank : /\s*/
 

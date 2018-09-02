@@ -673,25 +673,9 @@ not_null     : /not/i /null/i
 
 unsigned     : /unsigned/i { $return = 0 }
 
-default_val :
-    /default/i CURRENT_TIMESTAMP
+default_val : /default/i ( CURRENT_TIMESTAMP | bit | VALUE | /[\w\d:.-]+/ )
     {
         $return =  $item[2];
-    }
-    |
-    /default/i bit
-    {
-        $return  =  $item[2];
-    }
-    |
-    /default/i VALUE
-    {
-        $return  =  $item[2];
-    }
-    |
-    /default/i /[\w\d:.-]+/
-    {
-        $return  =  $item[2];
     }
 
 auto_inc : /auto_increment/i { 1 }

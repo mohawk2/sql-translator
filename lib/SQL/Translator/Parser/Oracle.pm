@@ -150,7 +150,7 @@ create : create_table table_name '(' create_definition(s /,/) ')' table_option(s
 
         my $i = 1;
         my @constraints;
-        for my $definition ( @{ $item[4] } ) {
+        for my $definition ( @{ $item{'create_definition(s)'} } ) {
             if ( $definition->{'type'} eq 'field' ) {
                 my $field_name = $definition->{'name'};
                 $tables{ $table_name }{'fields'}{ $field_name } =
@@ -172,7 +172,7 @@ create : create_table table_name '(' create_definition(s /,/) ')' table_option(s
             }
         }
 
-        for my $option ( @{ $item[6] } ) {
+        for my $option ( @{ $item{'table_option(s?)'} } ) {
             push @{ $tables{ $table_name }{'table_options'} }, $option;
         }
 
@@ -333,7 +333,7 @@ field : comment(s?) field_name data_type field_meta(s?) comment(s?)
     {
         my ( $is_pk, $default, @constraints );
         my $null = 1;
-        for my $meta ( @{ $item[4] } ) {
+        for my $meta ( @{ $item{'field_meta(s?)'} } ) {
             if ( $meta->{'type'} eq 'default' ) {
                 $default = $meta;
                 next;

@@ -35,12 +35,13 @@ use SQL::Translator::Parser::SQLCommon qw(
   $COMMENT_DD
   $COMMENT_SSTAR
   $BLANK_LINE
+  $COMMENT_DS
 );
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(parse);
 
-our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $NUMBER, $NULL, $COMMENT_DD, $COMMENT_SSTAR, $BLANK_LINE;
+our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $SQSTRING, $SBSTRING, $NUMBER, $NULL, $COMMENT_DD, $COMMENT_SSTAR, $BLANK_LINE, $COMMENT_DS;
 
 {
     my ( %tables, $table_order );
@@ -90,7 +91,7 @@ exec : exec_statement(s) GO
 
 exec_statement : /exec/i /[^\n]+/
 
-comment : COMMENT_DD | COMMENT_SSTAR
+comment : COMMENT_DD | COMMENT_SSTAR | COMMENT_DS
 
 #
 # Create table.

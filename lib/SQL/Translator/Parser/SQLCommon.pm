@@ -198,6 +198,18 @@ COMMENT_SSTAR : <skip: ''> m{^[ \t]*/\* \s*}x m{(.*?) \s* \*/[ \t]*\n?}xs
     }
 EOF
 
+=item $COMMENT_DS
+
+Single-line comment preceded by C<//>.
+
+=cut
+
+push @EXPORT_OK, qw($COMMENT_DS);
+our $COMMENT_DS = <<'EOF';
+COMMENT_DS : <skip: ''> /^[ \t]*\/\/[ \t]*(.*?)[ \t]*\n/
+    { $return = $1; }
+EOF
+
 =back
 
 =cut

@@ -210,6 +210,18 @@ COMMENT_DS : <skip: ''> /^[ \t]*\/\/[ \t]*(.*?)[ \t]*\n/
     { $return = $1; }
 EOF
 
+=item $COMMENT_PERCENT
+
+Single-line comment preceded by C<%>.
+
+=cut
+
+push @EXPORT_OK, qw($COMMENT_PERCENT);
+our $COMMENT_PERCENT = <<'EOF';
+COMMENT_PERCENT : <skip: ''> /^[ \t]*%[ \t]*(.*?)[ \t]*\n/
+    { $return = $1; }
+EOF
+
 =back
 
 =cut

@@ -917,7 +917,6 @@ default_val  : DEFAULT DEFAULT_VALUE ( '::' data_type )(?)
         my $val =  $item[2];
         $val =~ s/^\((\d+)\)\z/$1/; # for example (0)::smallint
         $return =  {
-            supertype => 'constraint',
             type      => 'default',
             value     => $val,
         }
@@ -925,7 +924,6 @@ default_val  : DEFAULT DEFAULT_VALUE ( '::' data_type )(?)
     | /null/i
     {
         $return =  {
-            supertype => 'constraint',
             type      => 'default',
             value     => 'NULL',
         }

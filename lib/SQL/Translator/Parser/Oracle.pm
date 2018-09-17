@@ -472,7 +472,6 @@ default_val  : /default/i VALUE
     {
         my $val =  $item[2];
         $return =  {
-            supertype => 'constraint',
             type      => 'default',
             value     => $val,
         }
@@ -480,7 +479,6 @@ default_val  : /default/i VALUE
     | /null/i
     {
         $return =  {
-            supertype => 'constraint',
             type      => 'default',
             value     => 'NULL',
         }

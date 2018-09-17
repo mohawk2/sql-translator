@@ -452,7 +452,7 @@ create_definition : constraint
 
 comment : COMMENT_DD | COMMENT_HASH | COMMENT_SSTAR
 
-field : /\s*/ comment(s?) field_name data_type field_qualifier(s?) reference_definition(?) on_update(?) /\s*/ comment(s?)
+field : /\s*/ comment(s?) field_name data_type field_qualifier(s?) reference_definition(?) /\s*/ comment(s?)
     {
         my %qualifiers  = map { %$_ } @{ $item{'field_qualifier(s?)'} || [] };
         if ( my @type_quals = @{ $item{'data_type'}{'qualifiers'} || [] } ) {
@@ -462,7 +462,7 @@ field : /\s*/ comment(s?) field_name data_type field_qualifier(s?) reference_def
         my $null = defined $qualifiers{'not_null'}
                    ? delete $qualifiers{'not_null'} : 1;
 
-        my @comments = ( @{ $item[2] }, (exists $qualifiers{comment} ? delete $qualifiers{comment} : ()) , @{ $item[9] } );
+        my @comments = ( @{ $item[2] }, (exists $qualifiers{comment} ? delete $qualifiers{comment} : ()) , @{ $item[8] } );
 
         $return = {
             supertype   => 'field',

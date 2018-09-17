@@ -134,13 +134,9 @@ use warnings;
 
 our $VERSION = '1.60';
 
-our $DEBUG;
-$DEBUG   = 0 unless defined $DEBUG;
-
-use Data::Dumper;
 use Storable qw(dclone);
 use DBI qw(:sql_types);
-use SQL::Translator::Utils qw/parse_mysql_version ddl_parser_instance/;
+use SQL::Translator::Utils qw/parse_mysql_version/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING_BS
   $SQSTRING_BS
@@ -151,6 +147,7 @@ use SQL::Translator::Parser::SQLCommon qw(
   $COMMENT_DD
   $COMMENT_HASH
   $COMMENT_SSTAR
+  parse_super
 );
 
 use base qw(Exporter);
@@ -163,8 +160,7 @@ use constant DEFAULT_PARSER_VERSION => 40000;
 our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQSTRING_BS, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH, $COMMENT_SSTAR;
 
 {
-    my ( $database_name, %tables, $table_order, %views,
-        $view_order, %procedures, $proc_order );
+    my ( $database_name, %tables, $table_order, @views, @procedures );
     my $delimiter = ';';
 }
 
@@ -176,10 +172,10 @@ our $GRAMMAR = << 'END_OF_GRAMMAR' . join "\n", $DQSTRING_BS, $SQSTRING_BS, $BQS
 #
 startrule : statement(s) eofile {
     {
-        database_name => $database_name,
+        schema_name   => $database_name,
         tables        => \%tables,
-        views         => \%views,
-        procedures    => \%procedures,
+        views         => \@views,
+        procedures    => \@procedures,
     }
 }
 
@@ -327,10 +323,11 @@ create : CREATE PROCEDURE NAME not_delimiter "$delimiter"
         my $owner = '';
         my $sql = "$item[1] $item[2] $item[3] $item[4]";
 
-        $procedures{ $func_name }{'order'}  = ++$proc_order;
-        $procedures{ $func_name }{'name'}   = $func_name;
-        $procedures{ $func_name }{'owner'}  = $owner;
-        $procedures{ $func_name }{'sql'}    = $sql;
+        push @procedures, {
+          name => $func_name,
+          owner => $owner,
+          sql => $sql,
+        };
     }
 
 PROCEDURE : /procedure/i
@@ -378,11 +375,17 @@ create : CREATE or_replace(?) create_view_option(s?) /view/i NAME /as/i view_sel
         # Hack to strip database from function calls in SQL
         $sql =~ s#`\w+`\.(`\w+`\()##g;
 
-        $views{ $view_name }{'order'}   = ++$view_order;
-        $views{ $view_name }{'name'}    = $view_name;
-        $views{ $view_name }{'sql'}     = $sql;
-        $views{ $view_name }{'options'} = $options;
-        $views{ $view_name }{'select'}  = $item{'view_select_statement'};
+        my @flds = map { $_->{'alias'} || $_->{'name'} }
+                   @{ $item{'view_select_statement'}{'columns'} || [] };
+        my @from = map { $_->{'alias'} || $_->{'name'} }
+                   @{ $item{'view_select_statement'}{'from'}{'tables'} || [] };
+        push @views, {
+          name => $view_name,
+          sql => $sql,
+          options => $options,
+          fields => \@flds,
+          tables => \@from,
+        };
     }
 
 create_view_option : view_algorithm | view_sql_security | view_definer
@@ -487,7 +490,6 @@ field : /\s*/ comment(s?) field_name data_type field_meta(s?) /\s*/ comment(s?)
         $fieldspec{comments} = \@comments if @comments;
         $fieldspec{constraints} = \@constraints if @constraints;
         $fieldspec{indices} = \@indices if @indices;
-
         $return = \%fieldspec;
     }
     | <error>
@@ -501,7 +503,7 @@ field_qualifier : /not/i /null/i
     { $return = { supertype => 'fieldspec', is_nullable => 1 } }
 
 field_qualifier : /default/i ( CURRENT_TIMESTAMP | bit | VALUE | /[\w\d:.-]+/ )
-    { $return = { supertype => 'fieldspec', default_value => $item[2] } }
+    { $return = { supertype => 'fieldspec', default => $item[2] } }
 
 field_qualifier : /auto_increment/i
     { $return = { supertype => 'fieldspec', is_auto_increment => 1 } }
@@ -777,161 +779,29 @@ END_OF_GRAMMAR
 sub parse {
     my ( $translator, $data ) = @_;
 
-    # Enable warnings within the Parse::RecDescent module.
-    # Make sure the parser dies when it encounters an error
-    local $::RD_ERRORS = 1 unless defined $::RD_ERRORS;
-    # Enable warnings. This will warn on unused rules &c.
-    local $::RD_WARN   = 1 unless defined $::RD_WARN;
-    # Give out hints to help fix problems.
-    local $::RD_HINT   = 1 unless defined $::RD_HINT;
-    local $::RD_TRACE  = $translator->trace ? 1 : undef;
-    local $DEBUG       = $translator->debug;
-
-    my $parser = ddl_parser_instance('MySQL');
-
     # Preprocess for MySQL-specific and not-before-version comments
     # from mysqldump
     my $parser_version = parse_mysql_version(
-        $translator->parser_args->{mysql_parser_version}, 'mysql'
+      $translator->parser_args->{mysql_parser_version}, 'mysql'
     ) || DEFAULT_PARSER_VERSION;
 
     while ( $data =~
         s#/\*!(\d{5})?(.*?)\*/#($1 && $1 > $parser_version ? '' : $2)#es
     ) {
-        # do nothing; is there a better way to write this? -- ky
+      # do nothing; is there a better way to write this? -- ky
     }
 
-    my $result = $parser->startrule($data);
-    return $translator->error( "Parse failed." ) unless defined $result;
-    warn "Parse result:".Dumper( $result ) if $DEBUG;
+    my $retval = parse_super($translator, $data, 'MySQL');
+    return $retval if !$retval;
 
     my $schema = $translator->schema;
-    $schema->name($result->{'database_name'}) if $result->{'database_name'};
-
-    my @tables = sort {
-        $result->{'tables'}{ $a }{'order'}
-        <=>
-        $result->{'tables'}{ $b }{'order'}
-    } keys %{ $result->{'tables'} };
-
-    for my $table_name ( @tables ) {
-        my $tdata =  $result->{tables}{ $table_name };
-        my $table =  $schema->add_table(
-            name  => $tdata->{'table_name'},
-        ) or die $schema->error;
-
-        $table->comments( $tdata->{'comments'} );
-
-        my @fields = sort {
-            $tdata->{'fields'}->{$a}->{'order'}
-            <=>
-            $tdata->{'fields'}->{$b}->{'order'}
-        } keys %{ $tdata->{'fields'} };
-
-        for my $fname ( @fields ) {
-            my $fdata = $tdata->{'fields'}{ $fname };
-            my $field = $table->add_field(
-                name              => $fdata->{'name'},
-                data_type         => $fdata->{'data_type'},
-                size              => $fdata->{'size'},
-                default_value     => $fdata->{'default_value'},
-                is_auto_increment => $fdata->{is_auto_increment},
-                is_nullable       => $fdata->{is_nullable},
-                comments          => $fdata->{'comments'},
-            ) or die $table->error;
-
-            $table->primary_key( $field->name ) if $fdata->{'is_primary_key'};
-
-            my %extra = %{ $fdata->{extra} || {} };
-            $field->extra( $_, $extra{$_} ) for keys %extra;
-        }
-
-        for my $idata ( @{ $tdata->{'indices'} || [] } ) {
-            my $index  =  $table->add_index(
-                name   => $idata->{'name'},
-                type   => uc($idata->{'type'} || ''),
-                fields => $idata->{'fields'},
-            ) or die $table->error;
-        }
-
-        if ( my @options = @{ $tdata->{'table_options'} || [] } ) {
-            my @cleaned_options;
-            my @ignore_opts = $translator->parser_args->{'ignore_opts'}
-                ? split( /,/, $translator->parser_args->{'ignore_opts'} )
-                : ();
-            if (@ignore_opts) {
-                my $ignores = { map { $_ => 1 } @ignore_opts };
-                foreach my $option (@options) {
-                    # make sure the option isn't in ignore list
-                    my ($option_key) = keys %$option;
-                    if ( !exists $ignores->{$option_key} ) {
-                        push @cleaned_options, $option;
-                    }
-                }
-            } else {
-                @cleaned_options = @options;
-            }
-            $table->options( \@cleaned_options ) or die $table->error;
-        }
-
-        for my $cdata ( @{ $tdata->{'constraints'} || [] } ) {
-            my $constraint       =  $table->add_constraint(
-                name             => $cdata->{'name'},
-                type             => $cdata->{'type'},
-                fields           => $cdata->{'fields'},
-                reference_table  => $cdata->{'reference_table'},
-                reference_fields => $cdata->{'reference_fields'},
-                match_type       => $cdata->{'match_type'} || '',
-                on_delete        => $cdata->{'on_delete'}
-                                 || $cdata->{'on_delete_do'},
-                on_update        => $cdata->{'on_update'}
-                                 || $cdata->{'on_update_do'},
-            ) or die $table->error;
-        }
-
-        # After the constrains and PK/idxs have been created,
-        # we normalize fields
-        normalize_field($_) for $table->get_fields;
+    for my $table ($schema->get_tables) {
+      # After the constrains and PK/idxs have been created,
+      # we normalize fields
+      normalize_field($_) for $table->get_fields;
     }
 
-    my @procedures = sort {
-        $result->{procedures}->{ $a }->{'order'}
-        <=>
-        $result->{procedures}->{ $b }->{'order'}
-    } keys %{ $result->{procedures} };
-
-    for my $proc_name ( @procedures ) {
-        $schema->add_procedure(
-            name  => $proc_name,
-            owner => $result->{procedures}->{$proc_name}->{owner},
-            sql   => $result->{procedures}->{$proc_name}->{sql},
-        );
-    }
-
-    my @views = sort {
-        $result->{views}->{ $a }->{'order'}
-        <=>
-        $result->{views}->{ $b }->{'order'}
-    } keys %{ $result->{views} };
-
-    for my $view_name ( @views ) {
-        my $view = $result->{'views'}{ $view_name };
-        my @flds = map { $_->{'alias'} || $_->{'name'} }
-                   @{ $view->{'select'}{'columns'} || [] };
-        my @from = map { $_->{'alias'} || $_->{'name'} }
-                   @{ $view->{'from'}{'tables'} || [] };
-
-        $schema->add_view(
-            name    => $view_name,
-            sql     => $view->{'sql'},
-            order   => $view->{'order'},
-            fields  => \@flds,
-            tables  => \@from,
-            options => $view->{'options'}
-        );
-    }
-
-    return 1;
+    return $retval;
 }
 
 # Takes a field, and returns

@@ -135,11 +135,6 @@ use warnings;
 
 our $VERSION = '1.60';
 
-our $DEBUG;
-$DEBUG   = 0 unless defined $DEBUG;
-
-use Data::Dumper;
-use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
@@ -149,6 +144,7 @@ use SQL::Translator::Parser::SQLCommon qw(
   $COMMENT_DD
   $COMMENT_HASH
   $COMMENT_SSTAR
+  parse_super
 );
 
 use base qw(Exporter);
@@ -242,67 +238,80 @@ create : CREATE TEMPORARY(?) TABLE table_name '(' definition(s /,/) ')' SEMICOLO
         my $db_name    = $item[4]->{'db_name'} || '';
         my $table_name = $item[4]->{'name'};
 
-        $tables{ $table_name }{'name'}         = $table_name;
-        $tables{ $table_name }{'is_temporary'} = $item[2][0] ? 1 : 0;
+        $tables{ $table_name }{'table_name'}         = $table_name;
+        $tables{ $table_name }{'temporary'} = $item[2][0] ? 1 : 0;
         $tables{ $table_name }{'order'}        = ++$table_order;
 
+        my $i = 1;
+        my @field_constraints;
         for my $def ( @{ $item[6] } ) {
-            if ( $def->{'supertype'} eq 'column' ) {
-                push @{ $tables{ $table_name }{'fields'} }, $def;
-            }
-            elsif ( $def->{'supertype'} eq 'constraint' ) {
+            my $supertype = delete $def->{supertype};
+            if ( $supertype eq 'field' ) {
+                my $field_name = $def->{'name'};
+                if ( $def->{'is_primary_key'} ) {
+                    push @{ $tables{ $table_name }{'constraints'} },
+                        {
+                            type   => 'primary_key',
+                            fields => [ $field_name ],
+                        }
+                    ;
+                }
+                push @field_constraints,
+                    @{ delete $def->{constraints} || [] };
+                push @{ $tables{ $table_name }{indices} },
+                    @{ delete $def->{indices} || [] };
+                $tables{ $table_name }{'fields'}{ $field_name } =
+                    { %$def, order => $i };
+                $i++;
+            } elsif ( $supertype eq 'constraint' ) {
                 push @{ $tables{ $table_name }{'constraints'} }, $def;
             }
+            elsif ( $supertype eq 'index' ) {
+                push @{ $tables{ $table_name }{'indices'} }, $def;
+            }
         }
+        push @{ $tables{ $table_name }{constraints} }, @field_constraints;
     }
 
 definition : constraint_def | column_def
 
 column_def: /\s*/ comment(s?) NAME type(?) column_constraint_def(s?)
     {
-        my $column = {
-            supertype      => 'column',
-            name           => $item{NAME},
-            data_type      => $item{'type(?)'}[0]->{'type'},
-            size           => $item{'type(?)'}[0]->{'size'},
-            is_nullable    => 1,
-            is_primary_key => 0,
-            is_unique      => 0,
-            check          => '',
-            default        => undef,
-            constraints    => $item{'column_constraint_def(s?)'},
-            comments       => $item{'comment(s?)'},
-        };
-
-
-        for my $c ( @{ $column->{constraints} } ) {
-            if ( $c->{'type'} eq 'not_null' ) {
-                $column->{'is_nullable'} = 0;
-            }
-            elsif ( $c->{'type'} eq 'primary_key' ) {
-                $column->{'is_primary_key'} = 1;
-            }
-            elsif ( $c->{'type'} eq 'unique' ) {
-                $column->{'is_unique'} = 1;
-            }
-            elsif ( $c->{'type'} eq 'check' ) {
-                $column->{'check'} = $c->{'expression'};
-            }
-            elsif ( $c->{'type'} eq 'default' ) {
-                $column->{'default'} = $c->{'value'};
-            }
-            elsif ( $c->{'type'} eq 'autoincrement' ) {
-                $column->{'is_auto_inc'} = 1;
+        my @comments = @{ $item[2] };
+        my ( @constraints, @indices );
+        my %fieldspec = (
+            supertype   => 'field',
+            name        => $item{NAME},
+            is_nullable => 1,
+        );
+        for my $meta ( @{ $item{'type(?)'} }, @{ $item{'column_constraint_def(s?)'} } ) {
+            my $supertype = delete $meta->{supertype};
+            if ($supertype eq 'comment') {
+                push @comments, $meta->{value};
+            } elsif ($supertype eq 'constraint') {
+                $meta = { %$meta, fields => [ $item{NAME} ] };
+                push @constraints, $meta;
+            } elsif ($supertype eq 'index') {
+                push @indices, { %$meta, fields => [ $item{NAME} ] };
+            } elsif ($supertype eq 'fieldextra') {
+                $fieldspec{extra} = { %{ $fieldspec{extra} || {} }, %$meta };
+            } elsif ($supertype eq 'fieldspec') {
+                %fieldspec = (%fieldspec, %$meta);
+            } else {
+                die "Unknown supertype: '$supertype'";
             }
         }
-
-        $column;
+        $fieldspec{comments} = \@comments if @comments;
+        $fieldspec{constraints} = \@constraints if @constraints;
+        $fieldspec{indices} = \@indices if @indices;
+        $return = \%fieldspec;
     }
 
 type : WORD parens_value_list(?)
     {
         $return = {
-            type => $item[1],
+            supertype => 'fieldspec',
+            data_type => $item[1],
             size => $item[2][0],
         }
     }
@@ -318,49 +327,31 @@ column_constraint_def : CONSTRAINT constraint_name column_constraint
     column_constraint
 
 column_constraint : NOT_NULL conflict_clause(?)
-    {
-        $return = {
-            type => 'not_null',
-        }
-    }
+    { $return = { supertype => 'fieldspec', is_nullable => 0 } }
     |
     PRIMARY_KEY sort_order(?) conflict_clause(?)
-    {
-        $return = {
-            type        => 'primary_key',
-            sort_order  => $item[2][0],
-            on_conflict => $item[2][0],
-        }
-    }
+    { $return = { supertype => 'fieldspec', is_primary_key => 1 } }
     |
     UNIQUE conflict_clause(?)
-    {
-        $return = {
-            type        => 'unique',
-            on_conflict => $item[2][0],
-        }
-    }
+    { $return = { supertype => 'constraint', type => 'unique' } }
     |
     CHECK_C '(' expr ')' conflict_clause(?)
     {
         $return = {
-            type        => 'check',
+            supertype => 'constraint',
+            type => 'check',
             expression  => $item[3],
             on_conflict => $item[5][0],
         }
     }
     |
     DEFAULT VALUE
-    {
-        $return   = {
-            type  => 'default',
-            value => $item[2],
-        }
-    }
+    { $return = { supertype => 'fieldspec', default => $item[2] } }
     |
     REFERENCES ref_def cascade_def(?)
     {
         $return   = {
+            supertype => 'constraint',
             type             => 'foreign_key',
             reference_table  => $item[2]{'reference_table'},
             reference_fields => $item[2]{'reference_fields'},
@@ -370,11 +361,7 @@ column_constraint : NOT_NULL conflict_clause(?)
     }
     |
     AUTOINCREMENT
-    {
-        $return = {
-            type => 'autoincrement',
-        }
-    }
+    { $return = { supertype => 'fieldspec', is_auto_increment => 1 } }
 
 constraint_def : comment(s?) CONSTRAINT constraint_name table_constraint
     {
@@ -463,9 +450,9 @@ field_name : NAME
 
 constraint_name : NAME
 
-conflict_clause : /on conflict/i conflict_algorigthm
+conflict_clause : /on conflict/i conflict_algorithm
 
-conflict_algorigthm : /(rollback|abort|fail|ignore|replace)/i
+conflict_algorithm : /(rollback|abort|fail|ignore|replace)/i
 
 parens_field_list : '(' column_list ')'
     { $item[2] }
@@ -488,11 +475,12 @@ create : CREATE TEMPORARY(?) TRIGGER NAME before_or_after(?) database_event ON t
         push @triggers, {
             name         => $item[4],
             is_temporary => $item[2][0] ? 1 : 0,
-            when         => $item[5][0],
+            perform_action_when         => $item[5][0],
             instead_of   => 0,
-            db_events    => [ $item[6] ],
+            database_events    => [ $item[6] ],
             action       => $item[9],
             on_table     => $table_name,
+            scope => 'row',
         }
     }
 
@@ -502,11 +490,11 @@ create : CREATE TEMPORARY(?) TRIGGER NAME instead_of database_event ON view_name
         push @triggers, {
             name         => $item[4],
             is_temporary => $item[2][0] ? 1 : 0,
-            when         => undef,
             instead_of   => 1,
-            db_events    => [ $item[6] ],
+            database_events    => [ $item[6] ],
             action       => $item[9],
             on_table     => $table_name,
+            scope => 'row',
         }
     }
 
@@ -632,99 +620,7 @@ END_OF_GRAMMAR
 
 sub parse {
     my ( $translator, $data ) = @_;
-
-    # Enable warnings within the Parse::RecDescent module.
-    local $::RD_ERRORS = 1 unless defined $::RD_ERRORS; # Make sure the parser dies when it encounters an error
-    local $::RD_WARN   = 1 unless defined $::RD_WARN; # Enable warnings. This will warn on unused rules &c.
-    local $::RD_HINT   = 1 unless defined $::RD_HINT; # Give out hints to help fix problems.
-
-    local $::RD_TRACE  = $translator->trace ? 1 : undef;
-    local $DEBUG       = $translator->debug;
-
-    my $parser = ddl_parser_instance('SQLite');
-
-    my $result = $parser->startrule($data);
-    return $translator->error( "Parse failed." ) unless defined $result;
-    warn Dumper( $result ) if $DEBUG;
-
-    my $schema = $translator->schema;
-    my @tables =
-        map   { $_->[1] }
-        sort  { $a->[0] <=> $b->[0] }
-        map   { [ $result->{'tables'}{ $_ }->{'order'}, $_ ] }
-        keys %{ $result->{'tables'} };
-
-    for my $table_name ( @tables ) {
-        my $tdata =  $result->{'tables'}{ $table_name };
-        my $table =  $schema->add_table(
-            name  => $tdata->{'name'},
-        ) or die $schema->error;
-
-        $table->comments( $tdata->{'comments'} );
-
-        for my $fdata ( @{ $tdata->{'fields'} } ) {
-            my $field = $table->add_field(
-                name              => $fdata->{'name'},
-                data_type         => $fdata->{'data_type'},
-                size              => $fdata->{'size'},
-                default_value     => $fdata->{'default'},
-                is_auto_increment => $fdata->{'is_auto_inc'},
-                is_nullable       => $fdata->{'is_nullable'},
-                comments          => $fdata->{'comments'},
-            ) or die $table->error;
-
-            $table->primary_key( $field->name ) if $fdata->{'is_primary_key'};
-
-            for my $cdata ( @{ $fdata->{'constraints'} } ) {
-                next unless $cdata->{'type'} eq 'foreign_key';
-                $cdata->{'fields'} ||= [ $field->name ];
-                push @{ $tdata->{'constraints'} }, $cdata;
-            }
-        }
-
-        for my $idata ( @{ $tdata->{'indices'} || [] } ) {
-            my $index  =  $table->add_index(
-                name   => $idata->{'name'},
-                type   => uc ($idata->{'type'}||''),
-                fields => $idata->{'fields'},
-            ) or die $table->error;
-        }
-
-        for my $cdata ( @{ $tdata->{'constraints'} || [] } ) {
-            my $constraint       =  $table->add_constraint(
-                name             => $cdata->{'name'},
-                type             => $cdata->{'type'},
-                fields           => $cdata->{'fields'},
-                reference_table  => $cdata->{'reference_table'},
-                reference_fields => $cdata->{'reference_fields'},
-                match_type       => $cdata->{'match_type'} || '',
-                on_delete        => $cdata->{'on_delete'}
-                                 || $cdata->{'on_delete_do'},
-                on_update        => $cdata->{'on_update'}
-                                 || $cdata->{'on_update_do'},
-            ) or die $table->error;
-        }
-    }
-
-    for my $def ( @{ $result->{'views'} || [] } ) {
-        my $view = $schema->add_view(
-            name => $def->{'name'},
-            sql  => $def->{'sql'},
-        );
-    }
-
-    for my $def ( @{ $result->{'triggers'} || [] } ) {
-        my $view                = $schema->add_trigger(
-            name                => $def->{'name'},
-            perform_action_when => $def->{'when'},
-            database_events     => $def->{'db_events'},
-            action              => $def->{'action'},
-            on_table            => $def->{'on_table'},
-            scope               => 'row', # SQLite only supports row triggers
-        );
-    }
-
-    return 1;
+    parse_super($translator, $data, 'SQLite');
 }
 
 1;

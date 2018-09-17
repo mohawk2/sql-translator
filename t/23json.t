@@ -143,7 +143,7 @@ my $json = from_json(<<JSON);
             "constraints" : [
                {
                   "deferrable" : 1,
-                  "expression" : "",
+                  "expression" : "age < 100 ",
                   "fields" : [],
                   "match_type" : "",
                   "name" : "",
@@ -269,7 +269,7 @@ my $json = from_json(<<JSON);
             "fields" : [],
             "name" : "person_pet",
             "order" : "1",
-            "sql" : "select pr.person_id, pr.name as person_name, pt.name as pet_name\\n  from   person pr, pet pt\\n  where  person.person_id=pet.pet_id\\n"
+            "sql" : "select pr.person_id, pr.name as person_name, pt.name as pet_name\\n  from   person pr, pet pt\\n  where  person.person_id=pet.pet_id"
          }
       }
    },

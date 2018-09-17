@@ -118,7 +118,7 @@ schema:
     pet:
       constraints:
         - deferrable: 1
-          expression: ''
+          expression: 'age < 100 '
           fields: []
           match_type: ''
           name: ''
@@ -219,7 +219,7 @@ schema:
       fields: []
       name: person_pet
       order: 1
-      sql: |
+      sql: |-
         select pr.person_id, pr.name as person_name, pt.name as pet_name
           from   person pr, pet pt
           where  person.person_id=pet.pet_id

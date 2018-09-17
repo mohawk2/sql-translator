@@ -80,11 +80,6 @@ use warnings;
 
 our $VERSION = '1.60';
 
-our $DEBUG;
-$DEBUG   = 0 unless defined $DEBUG;
-
-use Data::Dumper;
-use SQL::Translator::Utils qw/ddl_parser_instance/;
 use SQL::Translator::Parser::SQLCommon qw(
   $DQSTRING
   $SQSTRING
@@ -94,6 +89,7 @@ use SQL::Translator::Parser::SQLCommon qw(
   $COMMENT_DD
   $COMMENT_HASH
   $COMMENT_SSTAR
+  parse_super
 );
 
 use base qw(Exporter);
@@ -101,7 +97,7 @@ our @EXPORT_OK = qw(parse);
 
 our $GRAMMAR = <<'END_OF_GRAMMAR' . join "\n", $DQSTRING, $SQSTRING, $NUMBER, $NULL, $BLANK_LINE, $COMMENT_DD, $COMMENT_HASH, $COMMENT_SSTAR;
 
-{ my ( %tables, %indices, %constraints, $table_order, %views, $view_order, %procedures, $proc_order, %triggers, $trigger_order ) }
+{ my ( %tables, $table_order, @views, @procedures, @triggers ) }
 
 #
 # The "eofile" rule makes the parser fail if any "statement" rule
@@ -113,11 +109,9 @@ startrule : statement(s) eofile
     {
         $return = {
             tables      => \%tables,
-            indices     => \%indices,
-            constraints => \%constraints,
-            views       => \%views,
-            procedures  => \%procedures,
-            triggers    => \%triggers,
+            views       => \@views,
+            procedures  => \@procedures,
+            triggers    => \@triggers,
         };
     }
 
@@ -157,7 +151,6 @@ create : comment(s?) /\s*/ create_table table_name '(' create_definition(s /,/) 
         }
 
         my $i = 1;
-        my @constraints;
         for my $definition ( @{ $item{'create_definition(s)'} } ) {
             if ( $definition->{'type'} eq 'field' ) {
                 my $field_name = $definition->{'name'};
@@ -191,14 +184,14 @@ create : create_index index_name /on/i table_name index_expr table_option(?) ';'
     {
         my $table_name = $item[4];
         if ( $item[1] ) {
-            push @{ $constraints{ $table_name } }, {
+            push @{ $tables{$table_name}{constraints} }, {
                 name   => $item[2],
                 type   => 'unique',
                 fields => $item[5],
             };
         }
         else {
-            push @{ $indices{ $table_name } }, {
+            push @{ $tables{ $table_name }{'indices'} }, {
                 name   => $item[2],
                 type   => 'normal',
                 fields => $item[5],
@@ -215,18 +208,19 @@ index_expr: parens_name_list
    }
 
 create : /create/i /or replace/i /trigger/i table_name not_end m#^/$#im
-        {
+   {
         my $trigger_name = $item[4];
         # Hack to strip owner from trigger name
         $trigger_name =~ s#.*\.##;
         my $owner = '';
         my $action = "$item[1] $item[2] $item[3] $item[4] $item[5]";
 
-        $triggers{ $trigger_name }{'order'}  = ++$trigger_order;
-        $triggers{ $trigger_name }{'name'}   = $trigger_name;
-        $triggers{ $trigger_name }{'owner'}  = $owner;
-        $triggers{ $trigger_name }{'action'}    = $action;
-        }
+        push @triggers, {
+          name => $trigger_name,
+          owner => $owner,
+          action => $action,
+        };
+   }
 
 create : /create/i /or replace/i /procedure/i table_name not_end m#^/$#im
    {
@@ -236,10 +230,11 @@ create : /create/i /or replace/i /procedure/i table_name not_end m#^/$#im
         my $owner = '';
         my $sql = "$item[1] $item[2] $item[3] $item[4] $item[5]";
 
-        $procedures{ $proc_name }{'order'}  = ++$proc_order;
-        $procedures{ $proc_name }{'name'}   = $proc_name;
-        $procedures{ $proc_name }{'owner'}  = $owner;
-        $procedures{ $proc_name }{'sql'}    = $sql;
+        push @procedures, {
+          name => $proc_name,
+          owner => $owner,
+          sql => $sql,
+        };
    }
 
 not_end: m#.*?(?=^/$)#ism
@@ -251,9 +246,10 @@ create : /create/i /or replace/i /force/i /view/i table_name not_delimiter ';'
         $view_name =~ s#.*\.##;
         my $sql = "$item[1] $item[2] $item[3] $item[4] $item[5] $item[6] $item[7]";
 
-        $views{ $view_name }{'order'}  = ++$view_order;
-        $views{ $view_name }{'name'}   = $view_name;
-        $views{ $view_name }{'sql'}    = $sql;
+        push @views, {
+          name => $view_name,
+          sql => $sql,
+        };
    }
 
 not_delimiter: /.*?(?=;)/is
@@ -335,7 +331,7 @@ field : /\s*/ comment(s?) /\s*/ field_name data_type field_meta(s?) comment(s?)
             name           => $item{'field_name'},
             data_type      => $item{'data_type'}{'type'},
             size           => $item{'data_type'}{'size'},
-            null           => $null,
+            is_nullable    => $null,
             default        => $default->{'value'},
             is_primary_key => $is_pk,
             constraints    => [ @constraints ],
@@ -486,7 +482,7 @@ default_val  : /default/i VALUE
 
 create_table : /create/i global_temporary(?) /table/i
 
-table_option : /organization/i WORD
+table_option : /organization/i not_delimiter
     {
         $return = { 'ORGANIZATION' => $item[2] }
     }
@@ -506,7 +502,10 @@ key_value : WORD VALUE
         $return = { $item[1], $item[2] }
     }
 
-table_option : /[^;]+/
+table_option : WORD not_delimiter
+    {
+        $return = { uc $item[1], $item[2] }
+    }
 
 table_constraint : comment(s?) constraint_name(?) table_constraint_type deferrable(?) deferred(?) constraint_state(s?) comment(s?)
     {
@@ -590,122 +589,7 @@ END_OF_GRAMMAR
 
 sub parse {
     my ( $translator, $data ) = @_;
-
-    # Enable warnings within the Parse::RecDescent module.
-    local $::RD_ERRORS = 1 unless defined $::RD_ERRORS; # Make sure the parser dies when it encounters an error
-    local $::RD_WARN   = 1 unless defined $::RD_WARN; # Enable warnings. This will warn on unused rules &c.
-    local $::RD_HINT   = 1 unless defined $::RD_HINT; # Give out hints to help fix problems.
-
-    local $::RD_TRACE  = $translator->trace ? 1 : undef;
-    local $DEBUG       = $translator->debug;
-
-    my $parser = ddl_parser_instance('Oracle');
-
-    my $result = $parser->startrule( $data );
-    die "Parse failed.\n" unless defined $result;
-    if ( $DEBUG ) {
-        warn "Parser results =\n", Dumper($result), "\n";
-    }
-
-    my $schema      = $translator->schema;
-    my $indices     = $result->{'indices'};
-    my $constraints = $result->{'constraints'};
-    my @tables      = sort {
-        $result->{'tables'}{ $a }{'order'}
-        <=>
-        $result->{'tables'}{ $b }{'order'}
-    } keys %{ $result->{'tables'} };
-
-    for my $table_name ( @tables ) {
-        my $tdata    =  $result->{'tables'}{ $table_name };
-        next unless $tdata->{'table_name'};
-        my $table    =  $schema->add_table(
-            name     => $tdata->{'table_name'},
-            comments => $tdata->{'comments'},
-        ) or die $schema->error;
-
-        $table->options( $tdata->{'table_options'} );
-
-        my @fields = sort {
-            $tdata->{'fields'}->{$a}->{'order'}
-            <=>
-            $tdata->{'fields'}->{$b}->{'order'}
-        } keys %{ $tdata->{'fields'} };
-
-        for my $fname ( @fields ) {
-            my $fdata = $tdata->{'fields'}{ $fname };
-            my $field = $table->add_field(
-                name              => $fdata->{'name'},
-                data_type         => $fdata->{'data_type'},
-                size              => $fdata->{'size'},
-                default_value     => $fdata->{'default'},
-                is_auto_increment => $fdata->{'is_auto_inc'},
-                is_nullable       => $fdata->{'null'},
-                comments          => $fdata->{'comments'},
-            ) or die $table->error;
-        }
-
-        push @{ $tdata->{'indices'} }, @{ $indices->{ $table_name } || [] };
-        push @{ $tdata->{'constraints'} },
-             @{ $constraints->{ $table_name } || [] };
-
-        for my $idata ( @{ $tdata->{'indices'} || [] } ) {
-            my $index  =  $table->add_index(
-                name   => $idata->{'name'},
-                type   => uc $idata->{'type'},
-                fields => $idata->{'fields'},
-            ) or die $table->error;
-        }
-
-        for my $cdata ( @{ $tdata->{'constraints'} || [] } ) {
-            my $constraint       =  $table->add_constraint(
-                name             => $cdata->{'name'},
-                type             => $cdata->{'type'},
-                fields           => $cdata->{'fields'},
-                expression       => $cdata->{'expression'},
-                reference_table  => $cdata->{'reference_table'},
-                reference_fields => $cdata->{'reference_fields'},
-                match_type       => $cdata->{'match_type'} || '',
-                on_delete        => $cdata->{'on_delete'}
-                                 || $cdata->{'on_delete_do'},
-                on_update        => $cdata->{'on_update'}
-                                 || $cdata->{'on_update_do'},
-            ) or die $table->error;
-        }
-    }
-
-    my @procedures = sort {
-        $result->{procedures}->{ $a }->{'order'} <=> $result->{procedures}->{ $b }->{'order'}
-    } keys %{ $result->{procedures} };
-    foreach my $proc_name (@procedures) {
-      $schema->add_procedure(
-         name  => $proc_name,
-         owner => $result->{procedures}->{$proc_name}->{owner},
-         sql   => $result->{procedures}->{$proc_name}->{sql},
-      );
-    }
-
-    my @views = sort {
-        $result->{views}->{ $a }->{'order'} <=> $result->{views}->{ $b }->{'order'}
-    } keys %{ $result->{views} };
-    foreach my $view_name (keys %{ $result->{views} }) {
-      $schema->add_view(
-         name => $view_name,
-         sql  => $result->{views}->{$view_name}->{sql},
-      );
-    }
-
-    my @triggers = sort {
-        $result->{triggers}->{ $a }->{'order'} <=> $result->{triggers}->{ $b }->{'order'}
-    } keys %{ $result->{triggers} };
-    foreach my $trigger_name (@triggers) {
-        $schema->add_trigger(
-            name   => $trigger_name,
-            action => $result->{triggers}->{$trigger_name}->{action},
-        );
-    }
-
-    return 1;
+    parse_super($translator, $data, 'Oracle');
 }
 
 1;

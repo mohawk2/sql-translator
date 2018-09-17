@@ -204,39 +204,40 @@ create : comment(s?) CREATE temporary(?) TABLE table_id '(' create_definition(s?
         my $table_info  = $item{'table_id'};
         my $schema_name = $table_info->{'schema_name'};
         my $table_name  = $table_info->{'table_name'};
-        $tables{ $table_name }{'order'}       = ++$table_order;
-        $tables{ $table_name }{'schema_name'} = $schema_name;
-        $tables{ $table_name }{'table_name'}  = $table_name;
+        $tables{ $table_name }{'order'} = ++$table_order;
+        my $table_def = $tables{ $table_name }; # created by previous line
+        $table_def->{schema_name} = $schema_name;
+        $table_def->{table_name}  = $table_name;
 
-        $tables{ $table_name }{'temporary'} = $item[3][0];
+        $table_def->{temporary} = $item{'temporary(?)'}[0];
 
-        if ( @{ $item[1] } ) {
-            $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
+        if ( @{ $item{'comment(s?)'} } ) {
+            $table_def->{comments} = [ @{ $item{'comment(s?)'} } ];
         }
 
         my @constraints;
-        for my $definition ( @{ $item[7] } ) {
+        for my $definition ( @{ $item{'create_definition(s?)'} } ) {
             if ( $definition->{'supertype'} eq 'field' ) {
                 my $field_name = $definition->{'name'};
-                $tables{ $table_name }{'fields'}{ $field_name } =
+                $table_def->{fields}{ $field_name } =
                     { %$definition, order => $field_order++ };
 
                 for my $constraint ( @{ $definition->{'constraints'} || [] } ) {
                     $constraint->{'fields'} = [ $field_name ];
-                    push @{ $tables{ $table_name }{'constraints'} },
+                    push @{ $table_def->{constraints} },
                         $constraint;
                 }
             }
             elsif ( $definition->{'supertype'} eq 'constraint' ) {
-                push @{ $tables{ $table_name }{'constraints'} }, $definition;
+                push @{ $table_def->{constraints} }, $definition;
             }
             elsif ( $definition->{'supertype'} eq 'index' ) {
-                push @{ $tables{ $table_name }{'indices'} }, $definition;
+                push @{ $table_def->{indices} }, $definition;
             }
         }
 
-        for my $option ( @{ $item[9] } ) {
-            $tables{ $table_name }{'table_options(s?)'}{ $option->{'type'} } =
+        for my $option ( @{ $item{'table_option(s?)'} } ) {
+            $table_def->{'table_options(s?)'}{ $option->{'type'} } =
                 $option;
         }
 

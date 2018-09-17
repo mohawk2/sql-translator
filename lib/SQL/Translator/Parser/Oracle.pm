@@ -440,8 +440,8 @@ ora_data_type :
     |
     /n?char/i { $return = 'character' }
     |
-   /n?dec/i { $return = 'decimal' }
-   |
+    /n?dec/i { $return = 'decimal' }
+    |
     /number/i { $return = 'number' }
     |
     /integer/i { $return = 'integer' }

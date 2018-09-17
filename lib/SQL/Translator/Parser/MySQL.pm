@@ -260,14 +260,12 @@ create : comment(s?) CREATE TEMPORARY(?) TABLE opt_if_not_exists(?) table_name '
             $tables{ $table_name }{'comments'} = [ @{ $item[1] } ];
         }
 
+        my @field_constraints; # previous parser puts these last so segregate
         my $i = 1;
         for my $definition ( @{ $item[8] } ) {
-            if ( $definition->{'supertype'} eq 'field' ) {
+            my $supertype = delete $definition->{supertype};
+            if ( $supertype eq 'field' ) {
                 my $field_name = $definition->{'name'};
-                $tables{ $table_name }{'fields'}{ $field_name } =
-                    { %$definition, order => $i };
-                $i++;
-
                 if ( $definition->{'is_primary_key'} ) {
                     push @{ $tables{ $table_name }{'constraints'} },
                         {
@@ -276,14 +274,22 @@ create : comment(s?) CREATE TEMPORARY(?) TABLE opt_if_not_exists(?) table_name '
                         }
                     ;
                 }
+                push @field_constraints,
+                    @{ delete $definition->{constraints} || [] };
+                push @{ $tables{ $table_name }{indices} },
+                    @{ delete $definition->{indices} || [] };
+                $tables{ $table_name }{'fields'}{ $field_name } =
+                    { %$definition, order => $i };
+                $i++;
             }
-            elsif ( $definition->{'supertype'} eq 'constraint' ) {
+            elsif ( $supertype eq 'constraint' ) {
                 push @{ $tables{ $table_name }{'constraints'} }, $definition;
             }
-            elsif ( $definition->{'supertype'} eq 'index' ) {
+            elsif ( $supertype eq 'index' ) {
                 push @{ $tables{ $table_name }{'indices'} }, $definition;
             }
         }
+        push @{ $tables{ $table_name }{constraints} }, @field_constraints;
 
         if ( my @options = @{ $item{'table_option(s?)'} } ) {
             for my $option ( @options ) {
@@ -452,112 +458,82 @@ create_definition : constraint
 
 comment : COMMENT_DD | COMMENT_HASH | COMMENT_SSTAR
 
-field : /\s*/ comment(s?) field_name data_type field_qualifier(s?) reference_definition(?) /\s*/ comment(s?)
+field : /\s*/ comment(s?) field_name data_type field_meta(s?) /\s*/ comment(s?)
     {
-        my %qualifiers  = map { %$_ } @{ $item{'field_qualifier(s?)'} || [] };
-        if ( my @type_quals = @{ $item{'data_type'}{'qualifiers'} || [] } ) {
-            $qualifiers{ $_ } = 1 for @type_quals;
-        }
-
-        my $null = defined $qualifiers{'not_null'}
-                   ? delete $qualifiers{'not_null'} : 1;
-
-        my @comments = ( @{ $item[2] }, (exists $qualifiers{comment} ? delete $qualifiers{comment} : ()) , @{ $item[8] } );
-
-        $return = {
+        my @comments = ( @{ $item[2] }, @{ $item[7] } );
+        my ( @constraints, @indices );
+        my %fieldspec = (
             supertype   => 'field',
             name        => $item{'field_name'},
-            data_type   => $item{'data_type'}{'type'},
-            size        => $item{'data_type'}{'size'},
-            list        => $item{'data_type'}{'list'},
-            null        => $null,
-            constraints => $item{'reference_definition(?)'},
-            comments    => [ @comments ],
-            %qualifiers,
+            is_nullable => 1,
+        );
+        for my $meta ( $item{data_type}, @{ $item{'field_meta(s?)'} } ) {
+            my $supertype = delete $meta->{supertype};
+            if ($supertype eq 'comment') {
+                push @comments, $meta->{value};
+            } elsif ($supertype eq 'constraint') {
+                $meta = { %$meta, fields => [ $item{'field_name'} ] };
+                push @constraints, $meta;
+            } elsif ($supertype eq 'index') {
+                push @indices, { %$meta, fields => [ $item{'field_name'} ] };
+            } elsif ($supertype eq 'fieldextra') {
+                $fieldspec{extra} = { %{ $fieldspec{extra} || {} }, %$meta };
+            } elsif ($supertype eq 'fieldspec') {
+                %fieldspec = (%fieldspec, %$meta);
+            } else {
+                die "Unknown supertype: '$supertype'";
+            }
         }
+        $fieldspec{comments} = \@comments if @comments;
+        $fieldspec{constraints} = \@constraints if @constraints;
+        $fieldspec{indices} = \@indices if @indices;
+
+        $return = \%fieldspec;
     }
     | <error>
 
-field_qualifier : not_null
-    {
-        $return = {
-             null => $item{'not_null'},
-        }
-    }
+field_meta : field_qualifier | reference_definition
 
-field_qualifier : default_val
-    {
-        $return = {
-             default => $item{'default_val'},
-        }
-    }
+field_qualifier : /not/i /null/i
+    { $return = { supertype => 'fieldspec', is_nullable => 0 } }
+    |
+    /null/i
+    { $return = { supertype => 'fieldspec', is_nullable => 1 } }
 
-field_qualifier : auto_inc
-    {
-        $return = {
-             is_auto_inc => $item{'auto_inc'},
-        }
-    }
+field_qualifier : /default/i ( CURRENT_TIMESTAMP | bit | VALUE | /[\w\d:.-]+/ )
+    { $return = { supertype => 'fieldspec', default_value => $item[2] } }
+
+field_qualifier : /auto_increment/i
+    { $return = { supertype => 'fieldspec', is_auto_increment => 1 } }
 
 field_qualifier : primary_key
-    {
-        $return = {
-             is_primary_key => $item{'primary_key'},
-        }
-    }
 
-field_qualifier : unsigned
-    {
-        $return = {
-             is_unsigned => $item{'unsigned'},
-        }
-    }
+field_qualifier : /unsigned/i
+    { $return = { supertype => 'fieldextra', unsigned => 1 } }
+
 
 field_qualifier : /character set/i WORD
-    {
-        $return = {
-            'CHARACTER SET' => $item[2],
-        }
-    }
+    { $return = { supertype => 'fieldextra', 'character set' => $item[2] } }
 
 field_qualifier : /collate/i WORD
-    {
-        $return = {
-            COLLATE => $item[2],
-        }
-    }
+    { $return = { supertype => 'fieldextra', collate => $item[2] } }
 
 field_qualifier : /on update/i CURRENT_TIMESTAMP
-    {
-        $return = {
-            'ON UPDATE' => $item[2],
-        }
-    }
+    { $return = { supertype => 'fieldextra', 'on update' => $item[2] } }
 
 field_qualifier : /unique/i KEY(?)
-    {
-        $return = {
-            is_unique => 1,
-        }
-    }
+    { $return = { supertype => 'constraint', type => 'unique' } }
 
 field_qualifier : KEY
-    {
-        $return = {
-            has_index => 1,
-        }
-    }
+    { $return = { supertype => 'index' } }
 
 field_qualifier : /comment/i string
-    {
-        $return = {
-            comment => $item[2],
-        }
-    }
+    { $return = { supertype => 'comment', value => $item[2] } }
 
 reference_definition : /references/i table_name parens_field_list(?) match_type(?) on_delete(?) on_update(?)
     {
         $return = {
+            supertype        => 'constraint',
             type             => 'foreign_key',
             reference_table  => $item[2],
             reference_fields => $item[3][0],
@@ -602,23 +578,22 @@ data_type    : WORD parens_value_list(s?) type_qualifier(s?)
     {
         my $type = $item[1];
         my $size; # field size, applicable only to non-set fields
-        my $list; # set list, applicable only to sets (duh)
+        my @list; # set list, applicable only to sets (duh)
 
         if ( uc($type) =~ /^(SET|ENUM)$/ ) {
-            $size = undef;
-            $list = $item[2][0];
-        }
-        else {
+            @list = @{ $item[2][0] };
+        } else {
             $size = $item[2][0];
-            $list = [];
         }
-
+        my %extra;
+        $extra{list} = \@list if @list;
+        $extra{$_} = 1 for @{ $item[3] };
 
         $return        = {
-            type       => $type,
+            supertype  => 'fieldspec',
+            data_type  => $type,
             size       => $size,
-            list       => $list,
-            qualifiers => $item[3],
+            keys(%extra) ? (extra => \%extra) : (),
         }
     }
 
@@ -635,22 +610,8 @@ field_type   : WORD
 
 create_index : /create/i /index/i
 
-not_null     : /not/i /null/i
-    { $return = 0 }
-    |
-    /null/i
-    { $return = 1 }
-
-unsigned     : /unsigned/i { $return = 0 }
-
-default_val : /default/i ( CURRENT_TIMESTAMP | bit | VALUE | /[\w\d:.-]+/ )
-    {
-        $return =  $item[2];
-    }
-
-auto_inc : /auto_increment/i { 1 }
-
-primary_key : /primary/i /key/i { 1 }
+primary_key : /primary/i /key/i
+    { $return = { supertype => 'fieldspec', is_primary_key => 1 } }
 
 constraint : primary_key_def
     | unique_key_def
@@ -873,50 +834,22 @@ sub parse {
                 name              => $fdata->{'name'},
                 data_type         => $fdata->{'data_type'},
                 size              => $fdata->{'size'},
-                default_value     => $fdata->{'default'},
-                is_auto_increment => $fdata->{'is_auto_inc'},
-                is_nullable       => $fdata->{'null'},
+                default_value     => $fdata->{'default_value'},
+                is_auto_increment => $fdata->{is_auto_increment},
+                is_nullable       => $fdata->{is_nullable},
                 comments          => $fdata->{'comments'},
             ) or die $table->error;
 
             $table->primary_key( $field->name ) if $fdata->{'is_primary_key'};
 
-            for my $qual ( qw[ binary unsigned zerofill list collate ],
-                    'character set', 'on update' ) {
-                if ( my $val = $fdata->{ $qual } || $fdata->{ uc $qual } ) {
-                    next if ref $val eq 'ARRAY' && !@$val;
-                    $field->extra( $qual, $val );
-                }
-            }
-
-            if ( $fdata->{'has_index'} ) {
-                $table->add_index(
-                    name   => '',
-                    type   => 'NORMAL',
-                    fields => $fdata->{'name'},
-                ) or die $table->error;
-            }
-
-            if ( $fdata->{'is_unique'} ) {
-                $table->add_constraint(
-                    name   => '',
-                    type   => 'UNIQUE',
-                    fields => $fdata->{'name'},
-                ) or die $table->error;
-            }
-
-            for my $cdata ( @{ $fdata->{'constraints'} } ) {
-                next unless $cdata->{'type'} eq 'foreign_key';
-                $cdata->{'fields'} ||= [ $field->name ];
-                push @{ $tdata->{'constraints'} }, $cdata;
-            }
-
+            my %extra = %{ $fdata->{extra} || {} };
+            $field->extra( $_, $extra{$_} ) for keys %extra;
         }
 
         for my $idata ( @{ $tdata->{'indices'} || [] } ) {
             my $index  =  $table->add_index(
                 name   => $idata->{'name'},
-                type   => uc $idata->{'type'},
+                type   => uc($idata->{'type'} || ''),
                 fields => $idata->{'fields'},
             ) or die $table->error;
         }
